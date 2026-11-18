@@ -1,5 +1,7 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, UploadFile,HTTPException
 from pydantic import BaseModel
+import cv2
+import numpy as np
 
 router = APIRouter()
 
@@ -33,10 +35,19 @@ def recommend_activity(data: MoodRequest):
 async def upload_image(file: UploadFile = File(...)):
 
     image_bytes = await file.read()
+    image_array = np.frombuffer(image_bytes, np.uint8)
+    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image file"
+        )
 
+    height, width, channels = image.shape
     return {
-        "message": "Image uploaded successfully!",
+        "message": "Image processed successfully!",
         "filename": file.filename,
-        "content_type": file.content_type,
-        "file_size": len(image_bytes)
+        "width": width,
+        "height": height,
+        "channels": channels
     }
