@@ -4,7 +4,8 @@ export type SupportedMood =
   | "Happy"
   | "Neutral"
   | "Lazy"
-  | "Angry";
+  | "Angry"
+  | "Frustrated";
 
 export interface RecommendedActivity {
   id: "meme" | "air-painter" | "move-match" | "bubble-burst";
@@ -24,6 +25,7 @@ export interface RecommendedActivity {
 // Neutral -> Move & Match
 // Lazy -> Move & Match
 // Angry -> Bubble Burst
+// Frustrated -> Bubble Burst
 export const MOOD_ACTIVITY_MAPPING: Record<SupportedMood, RecommendedActivity> = {
   Sad: {
     id: "meme",
@@ -71,6 +73,15 @@ export const MOOD_ACTIVITY_MAPPING: Record<SupportedMood, RecommendedActivity> =
     art: "move",
   },
   Angry: {
+    id: "bubble-burst",
+    title: "Bubble Burst",
+    category: "Stress Release",
+    duration: "2 min",
+    description: "Pop the pressure away with satisfying, explosive stress bubbles.",
+    color: "#FF765E",
+    art: "focus",
+  },
+  Frustrated: {
     id: "bubble-burst",
     title: "Bubble Burst",
     category: "Stress Release",

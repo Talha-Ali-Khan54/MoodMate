@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { currentUser, signOut, saveMoodEntry } from "@/lib/auth";
 import { CameraPanel } from "@/components/CameraPanel";
 import { MemeStudio } from "@/components/MemeStudio/MemeStudio";
+import { BubbleBurst } from "@/components/BubbleBurst/BubbleBurst";
 import {
   type HybridMoodResult,
   FRONTEND_MOOD_TO_THEME,
@@ -350,6 +351,7 @@ function MoodCheckin({
     "Neutral",
     "Lazy",
     "Angry",
+    "Frustrated",
   ];
 
   function handleHybridPrediction(result: HybridMoodResult) {
@@ -361,7 +363,8 @@ function MoodCheckin({
     else if (result.frontendMood === "Overwhelmed") initialChoice = "Overwhelmed";
     else if (result.frontendMood === "Happy") initialChoice = "Happy";
     else if (result.frontendMood === "Lazy") initialChoice = "Lazy";
-    else if (result.frontendMood === "Angry" || result.frontendMood === "Frustrated") initialChoice = "Angry";
+    else if (result.frontendMood === "Angry") initialChoice = "Angry";
+    else if (result.frontendMood === "Frustrated") initialChoice = "Frustrated";
     else initialChoice = "Neutral";
 
     setConfirmedMood(initialChoice);
@@ -522,8 +525,8 @@ function Results({
             key={a.title}
             activity={a}
             onStart={() => {
-              if (a.id === "meme") {
-                setActivity?.("meme");
+              if (a.id === "meme" || a.id === "bubble-burst") {
+                setActivity?.(a.id);
                 go("activity");
               } else if (onStartActivity) {
                 onStartActivity(a.id, a.title);
@@ -559,7 +562,7 @@ function ActivityCard({ activity, onStart, featured = false }: { activity: typeo
 
 function Activities({ go, setActivity }: { go: (p: Page) => void; setActivity: (id: string) => void }) {
   const [filter, setFilter] = useState("All");
-  const filters = ["All", "Relax & Breathe", "Move Your Body", "Get Creative", "Brain Boost", "Camera Challenge"];
+  const filters = ["All", "Stress Release", "Camera Challenge", "Relax & Breathe", "Move Your Body", "Get Creative", "Brain Boost"];
   const shown = filter === "All" ? activities : activities.filter((a) => a.cat === filter);
 
   return (
@@ -971,11 +974,11 @@ export default function App() {
   }
 
   function handleStartActivity(id: string, title: string) {
-    if (id === "meme") {
-      setActiveActivity("meme");
+    if (id === "meme" || id === "bubble-burst") {
+      setActiveActivity(id);
       go("activity");
     } else {
-      setToast(`${title} is coming soon! Try Meme Recreation Studio.`);
+      setToast(`${title} is coming soon! Try Meme Recreation Studio or Bubble Burst.`);
       setTimeout(() => setToast(""), 3500);
     }
   }
@@ -988,6 +991,7 @@ export default function App() {
   const renderActivity = () => {
     switch (activeActivity) {
       case "meme": return <MemeStudio go={go} />;
+      case "bubble-burst": return <BubbleBurst go={go} />;
       case "doodle": return <DoodleActivity go={go} />;
       case "box-breathing":
       default: return <BreathingActivity go={go} />;
