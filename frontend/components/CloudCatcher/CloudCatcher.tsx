@@ -20,6 +20,10 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [currentMessage, setCurrentMessage] = useState<string | null>(null);
 
+  // Fullscreen / Maximize Screen State
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const screenContainerRef = useRef<HTMLDivElement | null>(null);
+
   // Camera & Tracking states
   const [cameraState, setCameraState] = useState<"idle" | "requesting" | "ready" | "error">("idle");
   const [cameraError, setCameraError] = useState("");
@@ -120,6 +124,27 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
     }
   }, []);
 
+  // Fullscreen / Maximize toggle
+  const toggleMaximize = useCallback(() => {
+    const elem = screenContainerRef.current;
+    if (!elem) return;
+
+    if (!document.fullscreenElement) {
+      elem.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  // Sync fullscreen change state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
   // Video node ref callback
   const handleVideoRef = useCallback((node: HTMLVideoElement | null) => {
     videoRef.current = node;
@@ -163,7 +188,6 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
     setCollectedStars((prev) => {
       const next = prev + 1;
 
-      // Select next comforting message
       const msgObj = COMFORTING_MESSAGES[(next - 1) % COMFORTING_MESSAGES.length];
       setCurrentMessage(`${msgObj.emoji} ${msgObj.text}`);
 
@@ -174,8 +198,11 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
         setCurrentMessage(null);
       }, 4500);
 
-      // Reached completion target!
+      // Reached completion target
       if (next >= TARGET_STARS) {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
         setTimeout(() => {
           stopCamera();
           setScreen("completed");
@@ -197,6 +224,9 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
       stopCamera();
       if (messageTimeoutRef.current) {
         clearTimeout(messageTimeoutRef.current);
@@ -236,7 +266,7 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
             <div className="md:col-span-7 space-y-4">
               <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#E0F2FE] border border-[#75C9F5] text-[#0369A1] font-extrabold text-xs uppercase tracking-wider">
                 <span>☁️</span>
-                <span>Sad & Reflective Mood Journey</span>
+                <span>Sad &amp; Reflective Mood Journey</span>
               </div>
 
               <h1 className="text-4xl md:text-5xl font-extrabold text-[#20213F] font-fredoka leading-tight">
@@ -273,10 +303,10 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
 
                 <div className="p-3.5 rounded-2xl bg-[#F0F9FF] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
-                    <span>☀️</span> The Sky Clears
+                    <span>⛶</span> Fullscreen Mode
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    Watch the grey, overcast environment transform into peaceful sunshine.
+                    Maximize the calm, serene sky view across your entire monitor.
                   </p>
                 </div>
 
@@ -317,7 +347,6 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
             {/* Right Mascot Artwork */}
             <div className="md:col-span-5 flex flex-col items-center justify-center text-center p-6 bg-[#E0F2FE]/50 rounded-2xl border-2 border-[#20213F]">
               <div className="relative w-44 h-44 flex items-center justify-center">
-                {/* Visual Cloudy Mascot Floating */}
                 <svg
                   className="w-40 h-40 animate-bounce"
                   style={{ animationDuration: "3s" }}
@@ -359,19 +388,25 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
   }
 
   /* ========================================================================= */
-  /* SCREEN 2: ACTIVE GAME (Browser Sized, Zero Overflow, Relaxing)            */
+  /* SCREEN 2: ACTIVE GAME (With Fullscreen Maximize Support)                  */
   /* ========================================================================= */
   if (screen === "playing") {
     const progressPercent = (collectedStars / TARGET_STARS) * 100;
 
     return (
       <div
-        className="page activity-page max-w-6xl mx-auto px-3 py-1 flex flex-col overflow-hidden"
-        style={{ height: "calc(100vh - 80px)", maxHeight: "calc(100dvh - 80px)" }}
+        ref={screenContainerRef}
+        className={`page activity-page max-w-6xl mx-auto px-3 py-1 flex flex-col overflow-hidden bg-[#FFFDF8] ${
+          isFullscreen ? "fixed inset-0 z-50 max-w-none w-screen h-screen p-4" : ""
+        }`}
+        style={{
+          height: isFullscreen ? "100vh" : "calc(100vh - 80px)",
+          maxHeight: isFullscreen ? "100vh" : "calc(100dvh - 80px)",
+        }}
       >
         {/* Top Game HUD Bar */}
         <div className="shrink-0 bg-[#FFFDF8] rounded-2xl border-2 border-[#20213F] px-4 py-2.5 shadow-[4px_4px_0px_#20213F] flex flex-wrap items-center justify-between gap-3 mb-2">
-          {/* Left: Pause, Sound */}
+          {/* Left: Pause, Maximize, Sound */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsPaused((p) => !p)}
@@ -380,6 +415,17 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
               className="py-1.5 px-3 rounded-xl font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#F0F9FF] disabled:opacity-50 cursor-pointer"
             >
               {isPaused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+
+            {/* Maximize / Fullscreen Button */}
+            <button
+              onClick={toggleMaximize}
+              style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+              className="py-1.5 px-3 rounded-xl font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#F0F9FF] cursor-pointer flex items-center gap-1.5"
+              title={isFullscreen ? "Exit Fullscreen" : "Maximize Screen"}
+            >
+              <span>{isFullscreen ? "⤡" : "⛶"}</span>
+              <span>{isFullscreen ? "Restore" : "Maximize"}</span>
             </button>
 
             <button
@@ -414,6 +460,7 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
+                if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
                 stopCamera();
                 go("activities");
               }}
@@ -458,7 +505,7 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
           {/* Instruction Pill */}
           <div className="absolute bottom-4 left-4 z-20 px-4 py-2 rounded-xl bg-white/90 backdrop-blur-xs border border-[#20213F]/20 text-[#20213F] font-fredoka text-xs md:text-sm font-bold shadow-sm flex items-center gap-2">
             <span>↔️</span>
-            <span>Move your head left & right to glide Cloudy</span>
+            <span>Move your head left &amp; right to glide Cloudy</span>
           </div>
 
           {/* Friendly Out-of-View Warning */}
@@ -551,7 +598,7 @@ export function CloudCatcher({ go, onFinish }: CloudCatcherProps) {
   }
 
   /* ========================================================================= */
-  /* SCREEN 3: COMPLETION (Full Sunny Sky & Calming Affirmation)               */
+  /* SCREEN 3: COMPLETION                                                      */
   /* ========================================================================= */
   return (
     <div className="page activity-page max-w-3xl mx-auto px-4 py-8">

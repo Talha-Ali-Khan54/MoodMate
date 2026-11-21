@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { currentUser, signOut, saveMoodEntry } from "@/lib/auth";
@@ -9,7 +10,13 @@ import { BubbleBurst } from "@/components/BubbleBurst/BubbleBurst";
 import { MoveMatch } from "@/components/MoveMatch/MoveMatch";
 import { AirPainter } from "@/components/AirPainter/AirPainter";
 import { fetchMoodEntries, computeInsights, type MoodEntry, type MoodKey } from "@/lib/insights";
-
+import {
+  DEFAULT_PREFERENCES,
+  readPreferences,
+  saveProfile,
+  type Preferences,
+  type CheckInTime,
+} from "@/lib/settings";
 import {
   type HybridMoodResult,
   FRONTEND_MOOD_TO_THEME,
@@ -330,14 +337,6 @@ function Header({
   );
 }
 
-
-
-
-
-
-
-
-
 function Home({
   go, displayName, setActivity,
 }: {
@@ -424,29 +423,6 @@ function Home({
   );
 }
 
-// function WeeklyMood() {
-//   const days: [string, Mood][] = [["M","cloudy"],["T","sunny"],["W","wiggles"],["T","cloudy"],["F","spark"],["S","sunny"],["S","cloudy"]];
-//   return (
-//     <section className="card weekly">
-//       <div className="card-heading">
-//         <div><span className="eyebrow">THIS WEEK</span><h3>Your mood rhythm</h3></div>
-//         <span className="supportive">No right or wrong feelings</span>
-//       </div>
-//       <div className="mood-bars">
-//         {days.map(([d, m], i) => (
-//           <div key={i}>
-//             <div className="bar-track"><span style={{ height: `${[55,82,68,48,62,88,58][i]}%`, background: moodData[m].color }} /></div>
-//             <small>{d}</small>
-//           </div>
-//         ))}
-//       </div>
-//       <div className="mood-legend">
-//         {(["sunny","cloudy","spark","wiggles"] as Mood[]).map((m) => <span key={m}><i style={{ background: moodData[m].color }} />{moodData[m].mood}</span>)}
-//       </div>
-//     </section>
-//   );
-// }
-
 function MoodCheckin({
   select,
   selected,
@@ -455,6 +431,9 @@ function MoodCheckin({
   setHybridResult,
   confirmedMood,
   setConfirmedMood,
+  cameraAccess,
+  autoSuggest,
+  askNote,
 }: {
   select: (m: Mood) => void;
   selected: Mood | null;
@@ -463,9 +442,12 @@ function MoodCheckin({
   setHybridResult: (r: HybridMoodResult | null) => void;
   confirmedMood: SupportedMood | null;
   setConfirmedMood: (m: SupportedMood) => void;
+  cameraAccess: boolean;
+  autoSuggest: boolean;
+  askNote: boolean;
 }) {
   const [note, setNote] = useState("");
-  const [manualMode, setManualMode] = useState(false);
+  const [manualMode, setManualMode] = useState(!autoSuggest || !cameraAccess);
 
   const supportedMoods: SupportedMood[] = [
     "Sad",
@@ -480,7 +462,6 @@ function MoodCheckin({
   function handleHybridPrediction(result: HybridMoodResult) {
     setHybridResult(result);
 
-    // Map frontend detected mood to supported mood
     let initialChoice: SupportedMood = "Neutral";
     if (result.frontendMood === "Sad") initialChoice = "Sad";
     else if (result.frontendMood === "Overwhelmed") initialChoice = "Overwhelmed";
@@ -504,10 +485,18 @@ function MoodCheckin({
         <div className="ai-intro-note"><span>01</span><p>Face the camera for MediaPipe landmark reading and Random Forest prediction.</p></div>
       </section>
       <section className="ai-studio">
-        <CameraPanel
-          onPrediction={handleHybridPrediction}
-          onError={() => setManualMode(true)}
-        />
+        {cameraAccess ? (
+          <CameraPanel
+            onPrediction={handleHybridPrediction}
+            onError={() => setManualMode(true)}
+          />
+        ) : (
+          <div className="rounded-3xl border-2 border-[#20213F] bg-[#FFFDF8] p-8 text-center shadow-[6px_7px_0px_#20213F]">
+            <Icon name="camera" size={36} />
+            <h2 className="mt-3 font-fredoka text-2xl font-extrabold text-[#20213F]">Camera is turned off</h2>
+            <p className="mt-2 text-sm text-[#20213F]/75">You can still check in by choosing your mood. Turn the camera back on in Settings any time.</p>
+          </div>
+        )}
         <aside className="ai-guide">
           <div className="guide-mascot">
             <Mascot type={selected || "wiggles"} size={selected ? 190 : 150} mood={selected ? "excited" : "calm"} />
@@ -583,11 +572,13 @@ function MoodCheckin({
               );
             })}
           </div>
-          <div className="context-note">
-            <label htmlFor="mood-note"><span>Want to tell us a little more?</span><small>Optional · just for you</small></label>
-            <textarea id="mood-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={180} placeholder="What’s been on your mind?" />
-            <span>{note.length}/180</span>
-          </div>
+          {askNote && (
+            <div className="context-note">
+              <label htmlFor="mood-note"><span>Want to tell us a little more?</span><small>Optional · just for you</small></label>
+              <textarea id="mood-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={180} placeholder="What’s been on your mind?" />
+              <span>{note.length}/180</span>
+            </div>
+          )}
           <div className="mood-finish">
             <div><span className="eyebrow">UP NEXT</span><h3>Alright, let’s find something that might help.</h3></div>
             <button className="primary" disabled={!confirmedMood} onClick={() => confirm(confirmedMood || "Neutral", note)}>
@@ -606,19 +597,34 @@ function Results({
   go,
   setActivity,
   onStartActivity,
+  cameraAccess,
+  movement,
+  quiet,
 }: {
   mood: Mood;
   confirmedMood?: SupportedMood;
   go: (p: Page) => void;
   setActivity?: (id: string) => void;
   onStartActivity?: (id: string, title: string) => void;
+  cameraAccess: boolean;
+  movement: boolean;
+  quiet: boolean;
 }) {
   const data = resultCopy[mood];
   const recommendedMeta = getRecommendedActivity(confirmedMood || "Sad");
 
-  // Put the exact recommended activity as #1 featured
   const featuredAct = activities.find((a) => a.id === recommendedMeta.id) || activities[0];
-  const otherActs = activities.filter((a) => a.id !== featuredAct.id).slice(0, 2);
+
+  const CAMERA_IDS = ["meme", "bubble-burst", "move-match", "cloud-catcher", "air-painter"];
+  const MOVEMENT_IDS = ["move-match", "bubble-burst"];
+  const QUIET_IDS = ["box-breathing", "doodle"];
+  const score = (id: string) =>
+    (movement && MOVEMENT_IDS.includes(id) ? 1 : 0) + (quiet && QUIET_IDS.includes(id) ? 1 : 0);
+  const otherActs = activities
+    .filter((a) => a.id !== featuredAct.id && (cameraAccess || !CAMERA_IDS.includes(a.id)))
+    .sort((a, b) => score(b.id) - score(a.id))
+    .slice(0, 2);
+
   const displayed = [featuredAct, ...otherActs];
 
   return (
@@ -648,7 +654,13 @@ function Results({
             key={a.title}
             activity={a}
             onStart={() => {
-              if (a.id === "cloud-catcher" || a.id === "meme" || a.id === "bubble-burst" || a.id === "move-match") {
+              if (
+                a.id === "cloud-catcher" ||
+                a.id === "meme" ||
+                a.id === "bubble-burst" ||
+                a.id === "move-match" ||
+                a.id === "air-painter"
+              ) {
                 setActivity?.(a.id);
                 go("activity");
               } else if (onStartActivity) {
@@ -777,50 +789,6 @@ function BreathingActivity({ go }: { go: (p: Page) => void }) {
   );
 }
 
-function MemeChallenge({ go }: { go: (p: Page) => void }) {
-  const [targetMood] = useState<Mood>("sunny");
-  const [capturedMood, setCapturedMood] = useState<Mood | null>(null);
-
-  return (
-    <div className="page activity-experience">
-      <button className="back-link" onClick={() => go("activities")}>← Back to activities</button>
-      <div className="breathing-layout">
-        <section className="breathing-main">
-          <span className="pill pink">CAMERA CHALLENGE</span>
-          <h1>Copy the expression</h1>
-          <p>Try to match the face below as closely as you can.</p>
-
-          <div style={{ display: "flex", gap: "2rem", alignItems: "center", margin: "2rem 0" }}>
-            <div style={{ textAlign: "center" }}>
-              <Mascot type={targetMood} size={150} />
-              <b>Target</b>
-            </div>
-            <div style={{ fontSize: "2rem" }}>➡️</div>
-            <div style={{ textAlign: "center" }}>
-              {capturedMood ? <Mascot type={capturedMood} size={150} /> : <div style={{ width: 150, height: 150, border: "2px dashed #ccc", borderRadius: 20, display: "grid", placeItems: "center" }}>You</div>}
-              <b>You</b>
-            </div>
-          </div>
-
-          {!capturedMood ? (
-            <CameraPanel onPrediction={(res) => setCapturedMood(FRONTEND_MOOD_TO_THEME[res.frontendMood])} onError={() => alert("Couldn't access camera.")} />
-          ) : (
-            <div style={{ textAlign: "center", background: "#f0fdf4", padding: "2rem", borderRadius: 20 }}>
-              <h2 style={{ color: "#166534" }}>Great job!</h2>
-              <p>You matched the {moodData[targetMood].name} energy.</p>
-              <button className="primary" onClick={() => go("activities")}>Finish Activity</button>
-            </div>
-          )}
-        </section>
-        <aside className="breathing-friend">
-          <Mascot type={targetMood} size={210} mood="excited" />
-          <div className="speech">Can you make this face?</div>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
 function DoodleActivity({ go }: { go: (p: Page) => void }) {
   return (
     <div className="page activity-experience">
@@ -878,7 +846,6 @@ function Insights({ go }: { go: (p: Page) => void }) {
   const [reload, setReload] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
 
-  // Re-read the signed-in user's check-ins whenever this page opens, on retry, and when the tab regains focus.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -983,20 +950,46 @@ function Insights({ go }: { go: (p: Page) => void }) {
   );
 }
 
-
 function ProfileSettings({
-  settings = false, go, onSignOut, displayName, initials,
+  settings = false, go, onSignOut, displayName, initials, prefs, onPrefChange, onSaveProfile, onResetPrefs,
 }: {
   settings?: boolean;
   go: (p: Page) => void;
   onSignOut?: () => void;
   displayName: string;
   initials: string;
+  prefs: Preferences;
+  onPrefChange: (patch: Partial<Preferences>) => void;
+  onSaveProfile: (v: { fullName: string; nickname: string; checkInTime: CheckInTime }) => Promise<string | null>;
+  onResetPrefs: () => void;
 }) {
   const [activeTab, setActiveTab] = useState(settings ? 3 : 0);
-  const [camera, setCamera] = useState(true), [reminders, setReminders] = useState(true), [privateMode, setPrivateMode] = useState(true);
+  const [fullName, setFullName] = useState(displayName);
+  const [nickname, setNickname] = useState(prefs.nickname);
+  const [checkInTime, setCheckInTime] = useState<CheckInTime>(prefs.checkInTime);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const tabs = ["Profile information", "Check-in preferences", "Activity preferences", "Privacy & camera", "Account"];
-  const firstName = displayName.split(" ")[0];
+  const greeting = prefs.nickname || displayName.split(" ")[0];
+
+  useEffect(() => {
+    setNickname(prefs.nickname);
+    setCheckInTime(prefs.checkInTime);
+  }, [prefs.nickname, prefs.checkInTime]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    const error = await onSaveProfile({ fullName, nickname, checkInTime });
+    setSaving(false);
+    if (error) {
+      setMessage({ ok: false, text: error });
+    } else {
+      setFullName(fullName.trim());
+      setMessage({ ok: true, text: "Saved ✓" });
+    }
+  }
 
   return (
     <div className="page profile-page">
@@ -1004,7 +997,7 @@ function ProfileSettings({
         <div className="profile-avatar">{initials}<span>+</span></div>
         <div>
           <span className="eyebrow">{settings ? "YOUR PREFERENCES" : "YOUR PROFILE"}</span>
-          <h1>{settings ? "Make MoodMate yours." : `Hi, ${firstName}!`}</h1>
+          <h1>{settings ? "Make MoodMate yours." : `Hi, ${greeting}!`}</h1>
           <p>{settings ? "Choose how your companion supports you." : "You’ve been showing up for yourself since you joined MoodMate."}</p>
         </div>
         <Mascot type={settings ? "wiggles" : "sunny"} size={125} mood="calm" />
@@ -1026,17 +1019,24 @@ function ProfileSettings({
             <>
               <h2>The basics</h2>
               <p className="panel-intro">This helps us make your experience feel more personal.</p>
-              <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
-                <label>Display name<input defaultValue={displayName} /></label>
-                <label>What should we call you?<input defaultValue={firstName} /></label>
+              <form className="profile-form" onSubmit={submit}>
+                <label>Display name
+                  <input value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={50} required />
+                </label>
+                <label>What should we call you?
+                  <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={30} placeholder={displayName.split(" ")[0]} />
+                </label>
                 <label>Check-in time
-                  <select defaultValue="morning">
+                  <select value={checkInTime} onChange={(e) => setCheckInTime(e.target.value as CheckInTime)}>
                     <option value="morning">Morning · 9:00 AM</option>
                     <option value="afternoon">Afternoon · 2:00 PM</option>
                     <option value="evening">Evening · 7:00 PM</option>
                   </select>
                 </label>
-                <button className="primary">Save changes</button>
+                <button className="primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
+                {message && (
+                  <p role="status" className={`text-sm font-bold ${message.ok ? "text-[#166534]" : "text-[#FF765E]"}`}>{message.text}</p>
+                )}
               </form>
             </>
           )}
@@ -1046,8 +1046,8 @@ function ProfileSettings({
               <h2>How you check in</h2>
               <p className="panel-intro">Set the default settings for your daily check-ins.</p>
               <div className="toggle-list">
-                <Toggle title="Auto-suggest expression" text="Use the camera to suggest a mood right when you open the check-in." value={camera} set={setCamera} />
-                <Toggle title="Ask for a note" text="Prompt me to write a short note about my day." value={reminders} set={setReminders} />
+                <Toggle title="Auto-suggest expression" text="Offer the camera expression suggestion first. When off, check-ins open with the mood picker." value={prefs.autoSuggest} set={(v) => onPrefChange({ autoSuggest: v })} />
+                <Toggle title="Ask for a note" text="Show a short note box when I pick my mood by hand." value={prefs.askNote} set={(v) => onPrefChange({ askNote: v })} />
               </div>
             </>
           )}
@@ -1057,8 +1057,8 @@ function ProfileSettings({
               <h2>What feels good?</h2>
               <p className="panel-intro">We'll try to recommend activities that match these preferences.</p>
               <div className="toggle-list">
-                <Toggle title="Movement" text="Suggest physical activities like stretching or shaking it out." value={reminders} set={setReminders} />
-                <Toggle title="Quiet time" text="Suggest breathing or doodling instead." value={privateMode} set={setPrivateMode} />
+                <Toggle title="Movement" text="Suggest physical activities like stretching or shaking it out." value={prefs.movement} set={(v) => onPrefChange({ movement: v })} />
+                <Toggle title="Quiet time" text="Suggest breathing or doodling instead." value={prefs.quiet} set={(v) => onPrefChange({ quiet: v })} />
               </div>
             </>
           )}
@@ -1068,8 +1068,8 @@ function ProfileSettings({
               <h2>Your space, your rules</h2>
               <p className="panel-intro">Control what MoodMate can access. Your check-in notes always stay private.</p>
               <div className="toggle-list">
-                <Toggle title="Camera access" text="Allow optional expression suggestions during check-ins." value={camera} set={setCamera} />
-                <Toggle title="Private mode" text="Hide mood details in notifications and previews." value={privateMode} set={setPrivateMode} />
+                <Toggle title="Camera access" text="When off, camera activities and expression suggestions are disabled." value={prefs.cameraAccess} set={(v) => onPrefChange({ cameraAccess: v })} />
+                <Toggle title="Private mode" text="Hide mood details in notifications and previews." value={prefs.privateMode} set={(v) => onPrefChange({ privateMode: v })} />
                 <div className="privacy-box">
                   <Icon name="shield" size={28} />
                   <div><b>Your feelings are yours.</b><p>MoodMate does not sell personal data. Camera processing happens on your device.</p></div>
@@ -1080,8 +1080,8 @@ function ProfileSettings({
 
           {activeTab === 4 && (
             <>
-              <h2>Local account</h2>
-              <p className="panel-intro">MoodMate runs locally on your device. No cloud login required.</p>
+              <h2>Your account</h2>
+              <p className="panel-intro">Your settings are saved to your account and follow you to any device.</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 24 }}>
                 <button
                   className="secondary"
@@ -1091,7 +1091,13 @@ function ProfileSettings({
                 >
                   Sign out
                 </button>
-                <button className="text-button" style={{ color: "#FF765E", justifyContent: "flex-start" }}>
+                <button
+                  className="text-button"
+                  style={{ color: "#FF765E", justifyContent: "flex-start" }}
+                  onClick={() => {
+                    if (window.confirm("Reset all settings to their defaults?")) onResetPrefs();
+                  }}
+                >
                   Reset app settings
                 </button>
               </div>
@@ -1107,7 +1113,23 @@ function Toggle({ title, text, value, set }: { title: string; text: string; valu
   return (
     <div className="toggle-row">
       <div><b>{title}</b><p>{text}</p></div>
-      <button className={`toggle ${value ? "on" : ""}`} onClick={() => set(!value)} aria-pressed={value}><i /></button>
+      <button className={`toggle ${value ? "on" : ""}`} onClick={() => set(!value)} aria-pressed={value} aria-label={title}><i /></button>
+    </div>
+  );
+}
+
+function CameraOff({ go }: { go: (p: Page) => void }) {
+  return (
+    <div className="page activity-experience">
+      <section className="breathing-main" style={{ textAlign: "center" }}>
+        <span className="pill pink">CAMERA IS OFF</span>
+        <h1>This one needs your camera</h1>
+        <p>You turned camera access off in Settings. Turn it back on to play, or pick an activity that doesn’t use the camera.</p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24, flexWrap: "wrap" }}>
+          <button className="primary" onClick={() => go("settings")}>Open settings</button>
+          <button className="secondary" onClick={() => go("activities")}>Choose another activity</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1116,6 +1138,7 @@ export default function App() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
   const [userName, setUserName] = useState("Friend");
+  const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFERENCES);
   const [page, setPage] = useState<Page>("home");
   const [selected, setSelected] = useState<Mood | null>(null);
   const [hybridResult, setHybridResult] = useState<HybridMoodResult | null>(null);
@@ -1134,6 +1157,7 @@ export default function App() {
       const meta = (u.user_metadata ?? {}) as {
         full_name?: string;
         name?: string;
+        preferences?: unknown;
       };
       const resolvedName =
         meta.full_name?.trim() ||
@@ -1141,6 +1165,7 @@ export default function App() {
         u.email?.split("@")[0] ||
         "Friend";
       setUserName(resolvedName);
+      setPrefs(readPreferences(meta.preferences));
       setAuthChecked(true);
     }
     checkAuth();
@@ -1184,8 +1209,13 @@ export default function App() {
     setToast("Check-in saved. Thanks for sharing.");
     const rec = getRecommendedActivity(moodChoice);
 
-    // Direct to the matched interactive activity
-    if (rec.id === "cloud-catcher" || rec.id === "meme" || rec.id === "bubble-burst" || rec.id === "move-match") {
+    if (
+      rec.id === "cloud-catcher" ||
+      rec.id === "meme" ||
+      rec.id === "bubble-burst" ||
+      rec.id === "move-match" ||
+      rec.id === "air-painter"
+    ) {
       setActiveActivity(rec.id);
       go("activity");
     } else {
@@ -1218,14 +1248,48 @@ export default function App() {
     router.replace("/login");
   }
 
+  async function savePrefs(patch: Partial<Preferences>) {
+    const before = prefs;
+    setPrefs((p) => ({ ...p, ...patch }));
+    const result = await saveProfile({ preferences: patch });
+    if (!result.ok) {
+      setPrefs(before);
+      setToast("Couldn’t save that setting. Please try again.");
+    } else {
+      setToast("Settings saved.");
+    }
+    setTimeout(() => setToast(""), 3000);
+  }
+
+  async function handleSaveProfile(v: { fullName: string; nickname: string; checkInTime: CheckInTime }): Promise<string | null> {
+    const name = v.fullName.trim();
+    if (!name) return "Please enter a display name.";
+    if (name.length > 50) return "Display name can be up to 50 characters.";
+    const result = await saveProfile({
+      fullName: name,
+      preferences: { nickname: v.nickname.trim().slice(0, 30), checkInTime: v.checkInTime },
+    });
+    if (!result.ok) return result.error;
+    setUserName(result.fullName);
+    setPrefs(result.preferences);
+    return null;
+  }
+
   const renderActivity = () => {
+    if (
+      !prefs.cameraAccess &&
+      ["meme", "bubble-burst", "move-match", "cloud-catcher", "air-painter"].includes(activeActivity)
+    ) {
+      return <CameraOff go={go} />;
+    }
+
     switch (activeActivity) {
       case "cloud-catcher": return <CloudCatcher go={go} />;
       case "meme": return <MemeStudio go={go} />;
       case "bubble-burst": return <BubbleBurst go={go} />;
       case "move-match": return <MoveMatch go={go} />;
-      case "doodle": return <DoodleActivity go={go} />;
       case "air-painter": return <AirPainter go={go} />;
+      case "doodle": return <DoodleActivity go={go} />;
       case "box-breathing":
       default: return <BreathingActivity go={go} />;
     }
@@ -1249,7 +1313,13 @@ export default function App() {
           displayName={userName}
           initials={initials}
         />
-        {page === "home" && <Home go={go} displayName={userName} setActivity={setActiveActivity} />}
+        {page === "home" && (
+          <Home
+            go={go}
+            displayName={prefs.nickname || userName}
+            setActivity={setActiveActivity}
+          />
+        )}
         {page === "checkin" && (
           <MoodCheckin
             selected={selected}
@@ -1259,6 +1329,9 @@ export default function App() {
             setHybridResult={setHybridResult}
             confirmedMood={confirmedMood}
             setConfirmedMood={setConfirmedMood}
+            cameraAccess={prefs.cameraAccess}
+            autoSuggest={prefs.autoSuggest}
+            askNote={prefs.askNote}
           />
         )}
         {page === "results" && (
@@ -1268,6 +1341,9 @@ export default function App() {
             go={go}
             setActivity={setActiveActivity}
             onStartActivity={handleStartActivity}
+            cameraAccess={prefs.cameraAccess}
+            movement={prefs.movement}
+            quiet={prefs.quiet}
           />
         )}
         {page === "activities" && <Activities go={go} setActivity={setActiveActivity} />}
@@ -1279,6 +1355,10 @@ export default function App() {
             onSignOut={handleSignOut}
             displayName={userName}
             initials={initials}
+            prefs={prefs}
+            onPrefChange={savePrefs}
+            onSaveProfile={handleSaveProfile}
+            onResetPrefs={() => savePrefs(DEFAULT_PREFERENCES)}
           />
         )}
         {page === "settings" && (
@@ -1288,6 +1368,10 @@ export default function App() {
             onSignOut={handleSignOut}
             displayName={userName}
             initials={initials}
+            prefs={prefs}
+            onPrefChange={savePrefs}
+            onSaveProfile={handleSaveProfile}
+            onResetPrefs={() => savePrefs(DEFAULT_PREFERENCES)}
           />
         )}
       </main>
