@@ -8,7 +8,7 @@ export type SupportedMood =
   | "Frustrated";
 
 export interface RecommendedActivity {
-  id: "meme" | "air-painter" | "move-match" | "bubble-burst";
+  id: "meme" | "air-painter" | "move-match" | "bubble-burst" | "cloud-catcher";
   title: string;
   category: string;
   duration: string;
@@ -18,41 +18,40 @@ export interface RecommendedActivity {
 }
 
 // Centralized mood-to-activity recommendation mapping
-// Exactly as specified:
-// Sad -> Meme Recreation
-// Overwhelmed -> Meme Recreation
-// Happy -> Air Painter
+// Sad -> Cloud Catcher
+// Overwhelmed -> Cloud Catcher
+// Happy -> Meme Recreation
 // Neutral -> Move & Match
 // Lazy -> Move & Match
 // Angry -> Bubble Burst
 // Frustrated -> Bubble Burst
 export const MOOD_ACTIVITY_MAPPING: Record<SupportedMood, RecommendedActivity> = {
   Sad: {
-    id: "meme",
-    title: "Meme Recreation",
-    category: "Camera Challenge",
-    duration: "3 min",
-    description: "Turn that low mood upside down by recreating iconic memes.",
-    color: "#FFB0E0",
-    art: "camera",
+    id: "cloud-catcher",
+    title: "Cloud Catcher",
+    category: "Relaxing Journey",
+    duration: "2 min",
+    description: "Catch gentle stars with head movements to transform a gloomy sky into bright sunshine.",
+    color: "#75C9F5",
+    art: "cloud",
   },
   Overwhelmed: {
+    id: "cloud-catcher",
+    title: "Cloud Catcher",
+    category: "Relaxing Journey",
+    duration: "2 min",
+    description: "Take a calming pause, collect comforting stars, and let the storm clouds roll away.",
+    color: "#B991E8",
+    art: "cloud",
+  },
+  Happy: {
     id: "meme",
     title: "Meme Recreation",
     category: "Camera Challenge",
     duration: "3 min",
-    description: "Take a break from everything and laugh through silly meme recreations.",
-    color: "#B991E8",
-    art: "camera",
-  },
-  Happy: {
-    id: "air-painter",
-    title: "Air Painter",
-    category: "Creative Flow",
-    duration: "4 min",
-    description: "Channel your positive energy into freeform glowing neon artwork.",
+    description: "Channel your positive, joyful energy into recreating iconic hilarious memes.",
     color: "#FFD83D",
-    art: "draw",
+    art: "camera",
   },
   Neutral: {
     id: "move-match",
@@ -94,7 +93,7 @@ export const MOOD_ACTIVITY_MAPPING: Record<SupportedMood, RecommendedActivity> =
 
 /**
  * Returns the recommended activity for any mood string (case-insensitive).
- * Defaults to Meme Recreation if unknown.
+ * Defaults to Cloud Catcher for Sad/Overwhelmed, Meme Recreation for Happy, Bubble Burst for Angry.
  */
 export function getRecommendedActivity(mood: string): RecommendedActivity {
   const normalized = mood?.trim().toLowerCase() || "";
@@ -117,9 +116,13 @@ export function getRecommendedActivity(mood: string): RecommendedActivity {
   if (normalized.includes("lazy") || normalized.includes("tired")) {
     return MOOD_ACTIVITY_MAPPING.Lazy;
   }
-  if (normalized.includes("angry") || normalized.includes("spark") || normalized.includes("frustrat")) {
+  if (
+    normalized.includes("angry") ||
+    normalized.includes("spark") ||
+    normalized.includes("frustrat")
+  ) {
     return MOOD_ACTIVITY_MAPPING.Angry;
   }
 
-  return MOOD_ACTIVITY_MAPPING.Neutral;
+  return MOOD_ACTIVITY_MAPPING.Sad;
 }

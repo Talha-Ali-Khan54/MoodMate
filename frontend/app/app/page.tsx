@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { currentUser, signOut, saveMoodEntry } from "@/lib/auth";
 import { CameraPanel } from "@/components/CameraPanel";
+import { CloudCatcher } from "@/components/CloudCatcher/CloudCatcher";
 import { MemeStudio } from "@/components/MemeStudio/MemeStudio";
 import { BubbleBurst } from "@/components/BubbleBurst/BubbleBurst";
 import { MoveMatch } from "@/components/MoveMatch/MoveMatch";
@@ -108,10 +109,11 @@ const nav = [
 ] as const;
 
 const activities = [
-  { id: "meme", title: "Meme Recreation", desc: "Turn low or overwhelmed energy into hilarious custom meme recreations.", time: "3 min", cat: "Camera Challenge", color: "#FFB0E0", art: "camera" },
-  { id: "air-painter", title: "Air Painter", desc: "Channel your positive energy into glowing neon artwork.", time: "4 min", cat: "Creative Flow", color: "#FFD83D", art: "draw" },
-  { id: "move-match", title: "Move & Match", desc: "Quick, fun movement resets to bring energy, focus, and alignment.", time: "3 min", cat: "Move Your Body", color: "#75C9F5", art: "move" },
+  { id: "cloud-catcher", title: "Cloud Catcher", desc: "Guide your cloud with gentle head movements to catch stars and brighten the gloomy sky.", time: "2 min", cat: "Relaxing Journey", color: "#75C9F5", art: "cloud" },
+  { id: "meme", title: "Meme Recreation", desc: "Channel your positive, joyful energy into recreating iconic hilarious memes.", time: "3 min", cat: "Camera Challenge", color: "#FFD83D", art: "camera" },
   { id: "bubble-burst", title: "Bubble Burst", desc: "Pop the pressure away with satisfying, explosive stress bubbles.", time: "2 min", cat: "Stress Release", color: "#FF765E", art: "focus" },
+  { id: "move-match", title: "Move & Match", desc: "Quick, fun movement resets to bring energy, focus, and alignment.", time: "3 min", cat: "Move Your Body", color: "#A8E6C3", art: "move" },
+  { id: "air-painter", title: "Air Painter", desc: "Channel your positive energy into glowing neon artwork.", time: "4 min", cat: "Creative Flow", color: "#FFD83D", art: "draw" },
   { id: "box-breathing", title: "Box breathing", desc: "Find your rhythm with a gentle guided breath.", time: "2 min", cat: "Relax & Breathe", color: "#75C9F5", art: "breathe" },
   { id: "doodle", title: "Tiny doodle", desc: "Let your pencil wander. There is no wrong result.", time: "5 min", cat: "Get Creative", color: "#B991E8", art: "draw" },
 ] as const;
@@ -120,6 +122,18 @@ function ActivityArt({ type, color }: { type: string; color: string }) {
   return (
     <div className="activity-art" style={{ backgroundColor: color }}>
       <svg viewBox="0 0 100 80" aria-hidden="true">
+        {type === "cloud" && (
+          <>
+            <path
+              d="M30 52c-7 0-12-5-11-12 1-6 5-10 11-10 0-10 6-16 15-15 5-6 17-3 19 5 9-1 15 4 15 12 6 2 9 7 8 13-2 5-6 7-13 7H30Z"
+              fill="#fff"
+            />
+            <circle cx="43" cy="42" r="2.5" fill="#20213F" />
+            <circle cx="57" cy="42" r="2.5" fill="#20213F" />
+            <path d="M47 47q3 3 6 0" fill="none" stroke="#20213F" strokeWidth="2" strokeLinecap="round" />
+            <path d="M72 23l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5Z" fill="#FFF0A6" stroke="#20213F" strokeWidth="1.5" />
+          </>
+        )}
         {type === "breathe" && <><circle cx="50" cy="39" r="24" fill="#fff" opacity=".8" /><circle cx="50" cy="39" r="14" fill="none" stroke="#20213F" strokeWidth="3" /><path d="M50 14v10M25 39h10M65 39h10M50 54v10" stroke="#20213F" strokeWidth="3" strokeLinecap="round" /></>}
         {type === "move" && <><path d="M47 15c9 1 13 8 10 15l14 10-6 7-15-9-7 14 15 12-6 7-21-14 9-23-13 5-4-8 24-16Z" fill="#fff" /><circle cx="53" cy="12" r="8" fill="#20213F" /></>}
         {type === "draw" && <><path d="M18 59 66 11l13 13-48 48-17 4 4-17Z" fill="#fff" /><path d="m62 15 13 13M18 59l13 13" stroke="#20213F" strokeWidth="3" /><path d="M69 57q13-8 17 3-8 2-3 12" fill="none" stroke="#20213F" strokeWidth="3" strokeLinecap="round" /></>}
@@ -171,7 +185,7 @@ type Notice = { id: number; icon: string; title: string; text: string; time: str
 const initialNotices: Notice[] = [
   { id: 1, icon: "🔥", title: "7 day streak!", text: "A whole week of showing up for yourself. Keep it gentle.", time: "Just now", go: "insights", unread: true },
   { id: 2, icon: "🧠", title: "Time for a check-in", text: "How are you feeling today? It only takes a minute.", time: "9:00 AM", go: "checkin", unread: true },
-  { id: 3, icon: "🏃", title: "New: Move & Match", text: "Match five simple poses with your webcam for a quick body reset.", time: "Yesterday", go: "activities", unread: true },
+  { id: 3, icon: "☁️", title: "New: Cloud Catcher", text: "Catch gentle stars with your head movements to brighten cloudy days.", time: "Yesterday", go: "activities", unread: true },
 ];
 
 function ProfileCrystalPopover({
@@ -631,7 +645,7 @@ function Results({
             key={a.title}
             activity={a}
             onStart={() => {
-              if (a.id === "meme" || a.id === "bubble-burst" || a.id === "move-match") {
+              if (a.id === "cloud-catcher" || a.id === "meme" || a.id === "bubble-burst" || a.id === "move-match") {
                 setActivity?.(a.id);
                 go("activity");
               } else if (onStartActivity) {
@@ -1066,9 +1080,9 @@ export default function App() {
     setToast("Check-in saved. Thanks for sharing.");
     const rec = getRecommendedActivity(moodChoice);
 
-    // If Sad or Overwhelmed, directly go to Meme Recreation Studio!
-    if (rec.id === "meme") {
-      setActiveActivity("meme");
+    // Direct to the matched interactive activity
+    if (rec.id === "cloud-catcher" || rec.id === "meme" || rec.id === "bubble-burst" || rec.id === "move-match") {
+      setActiveActivity(rec.id);
       go("activity");
     } else {
       go("results");
@@ -1080,11 +1094,11 @@ export default function App() {
   }
 
   function handleStartActivity(id: string, title: string) {
-    if (id === "meme" || id === "bubble-burst" || id === "move-match") {
+    if (id === "cloud-catcher" || id === "meme" || id === "bubble-burst" || id === "move-match") {
       setActiveActivity(id);
       go("activity");
     } else {
-      setToast(`${title} is coming soon! Try Meme Recreation Studio, Bubble Burst or Move & Match.`);
+      setToast(`${title} is coming soon! Try Cloud Catcher, Meme Recreation, Bubble Burst or Move & Match.`);
       setTimeout(() => setToast(""), 3500);
     }
   }
@@ -1096,6 +1110,7 @@ export default function App() {
 
   const renderActivity = () => {
     switch (activeActivity) {
+      case "cloud-catcher": return <CloudCatcher go={go} />;
       case "meme": return <MemeStudio go={go} />;
       case "bubble-burst": return <BubbleBurst go={go} />;
       case "move-match": return <MoveMatch go={go} />;
