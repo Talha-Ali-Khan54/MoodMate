@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CameraPanel } from "./CameraPanel";
+import { FRONTEND_MOOD_TO_THEME } from "@/lib/mood";
 
 type Page = "home" | "checkin" | "results" | "activities" | "activity" | "insights" | "profile" | "settings";
 type Mood = "sunny" | "cloudy" | "spark" | "wiggles";
@@ -287,7 +288,7 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
         <div className="ai-intro-note"><span>01</span><p>Take a moment, face the camera and let MoodMate check in with you.</p></div>
       </section>
       <section className="ai-studio">
-        <CameraPanel onPrediction={(m) => { select(m); setManualMode(true); }} onError={() => setManualMode(true)} />
+        <CameraPanel onPrediction={(res) => { select(FRONTEND_MOOD_TO_THEME[res.frontendMood]); setManualMode(true); }} onError={() => setManualMode(true)} />
         <aside className="ai-guide">
           <div className="guide-mascot">
             <Mascot type={selected || "wiggles"} size={selected ? 190 : 150} mood={selected ? "excited" : "calm"} />
@@ -518,7 +519,7 @@ function MemeChallenge({ go }: { go: (p: Page) => void }) {
 
           {!capturedMood ? (
             <CameraPanel 
-              onPrediction={(m) => setCapturedMood(m)} 
+              onPrediction={(res) => setCapturedMood(FRONTEND_MOOD_TO_THEME[res.frontendMood])} 
               onError={() => alert("Couldn't access camera.")} 
             />
           ) : (

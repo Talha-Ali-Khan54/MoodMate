@@ -4,6 +4,14 @@ import { useRouter } from "next/navigation";
 import { currentUser, signOut, saveMoodEntry } from "@/lib/auth";
 import { CameraPanel } from "@/components/CameraPanel";
 import { MemeStudio } from "@/components/MemeStudio/MemeStudio";
+import {
+  type HybridMoodResult,
+  FRONTEND_MOOD_TO_THEME,
+} from "@/lib/mood";
+import {
+  getRecommendedActivity,
+  type SupportedMood,
+} from "@/lib/recommendations";
 
 type Page =
   | "home" | "checkin" | "results" | "activities"
@@ -98,12 +106,12 @@ const nav = [
 ] as const;
 
 const activities = [
+  { id: "meme", title: "Meme Recreation", desc: "Turn low or overwhelmed energy into hilarious custom meme recreations.", time: "3 min", cat: "Camera Challenge", color: "#FFB0E0", art: "camera" },
+  { id: "air-painter", title: "Air Painter", desc: "Channel your positive energy into glowing neon artwork.", time: "4 min", cat: "Creative Flow", color: "#FFD83D", art: "draw" },
+  { id: "move-match", title: "Move & Match", desc: "Quick, fun movement resets to bring energy, focus, and alignment.", time: "3 min", cat: "Physical Reset", color: "#75C9F5", art: "move" },
+  { id: "bubble-burst", title: "Bubble Burst", desc: "Pop the pressure away with satisfying, explosive stress bubbles.", time: "2 min", cat: "Stress Release", color: "#FF765E", art: "focus" },
   { id: "box-breathing", title: "Box breathing", desc: "Find your rhythm with a gentle guided breath.", time: "2 min", cat: "Relax & Breathe", color: "#75C9F5", art: "breathe" },
-  { id: "shake", title: "Shake it out", desc: "Release extra energy with a quick movement reset.", time: "4 min", cat: "Move Your Body", color: "#FFD83D", art: "move" },
   { id: "doodle", title: "Tiny doodle", desc: "Let your pencil wander. There is no wrong result.", time: "5 min", cat: "Get Creative", color: "#B991E8", art: "draw" },
-  { id: "focus", title: "Five-sense finder", desc: "Notice what is around you, one sense at a time.", time: "3 min", cat: "Brain Boost", color: "#A8E6C3", art: "focus" },
-  { id: "heart", title: "Three good things", desc: "Capture three small moments worth remembering.", time: "4 min", cat: "Gratitude & Reflection", color: "#FF9D88", art: "heart" },
-  { id: "meme", title: "Meme Recreation Studio", desc: "Turn that low mood upside down by creating hilarious custom memes.", time: "3 min", cat: "Camera Challenge", color: "#FFB0E0", art: "camera" },
 ] as const;
 
 function ActivityArt({ type, color }: { type: string; color: string }) {
@@ -315,9 +323,50 @@ function WeeklyMood() {
   );
 }
 
-function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void; selected: Mood | null; confirm: (note: string) => void }) {
+function MoodCheckin({
+  select,
+  selected,
+  confirm,
+  hybridResult,
+  setHybridResult,
+  confirmedMood,
+  setConfirmedMood,
+}: {
+  select: (m: Mood) => void;
+  selected: Mood | null;
+  confirm: (mood: SupportedMood, note: string) => void;
+  hybridResult: HybridMoodResult | null;
+  setHybridResult: (r: HybridMoodResult | null) => void;
+  confirmedMood: SupportedMood | null;
+  setConfirmedMood: (m: SupportedMood) => void;
+}) {
   const [note, setNote] = useState("");
   const [manualMode, setManualMode] = useState(false);
+
+  const supportedMoods: SupportedMood[] = [
+    "Sad",
+    "Overwhelmed",
+    "Happy",
+    "Neutral",
+    "Lazy",
+    "Angry",
+  ];
+
+  function handleHybridPrediction(result: HybridMoodResult) {
+    setHybridResult(result);
+
+    // Map frontend detected mood to supported mood
+    let initialChoice: SupportedMood = "Neutral";
+    if (result.frontendMood === "Sad") initialChoice = "Sad";
+    else if (result.frontendMood === "Overwhelmed") initialChoice = "Overwhelmed";
+    else if (result.frontendMood === "Happy") initialChoice = "Happy";
+    else if (result.frontendMood === "Lazy") initialChoice = "Lazy";
+    else if (result.frontendMood === "Angry" || result.frontendMood === "Frustrated") initialChoice = "Angry";
+    else initialChoice = "Neutral";
+
+    setConfirmedMood(initialChoice);
+    select(FRONTEND_MOOD_TO_THEME[result.frontendMood] || "cloudy");
+  }
 
   return (
     <div className="page checkin-page">
@@ -326,22 +375,28 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
           <span className="pill lavender">AI EXPRESSION CHECK-IN</span>
           <h1>Let’s see what’s<br /><em>going on.</em></h1>
         </div>
-        <div className="ai-intro-note"><span>01</span><p>Take a moment, face the camera and let MoodMate check in with you.</p></div>
+        <div className="ai-intro-note"><span>01</span><p>Face the camera for MediaPipe landmark reading and Random Forest prediction.</p></div>
       </section>
       <section className="ai-studio">
-        <CameraPanel onPrediction={(m) => { select(m); }} onError={() => setManualMode(true)} />
+        <CameraPanel
+          onPrediction={handleHybridPrediction}
+          onError={() => setManualMode(true)}
+        />
         <aside className="ai-guide">
           <div className="guide-mascot">
             <Mascot type={selected || "wiggles"} size={selected ? 190 : 150} mood={selected ? "excited" : "calm"} />
             <span className="guide-scribble">I’m right here!</span>
           </div>
-          {selected ? (
+          {hybridResult ? (
             <div className="prediction-panel">
               <span className="eyebrow">EXPRESSION FOUND</span>
-              <h2>You’re looking {moodData[selected].mood.toLowerCase()}!</h2>
+              <h2>You’re looking {hybridResult.frontendMood.toLowerCase()}!</h2>
               <p>This is only a guess. It doesn’t define what you feel.</p>
               <h3>Does this match how you’re feeling?</h3>
-              <button className={`answer-yes ${selected ? "chosen" : ""}`} onClick={() => confirm("")}>
+              <button
+                className="answer-yes chosen"
+                onClick={() => confirm(confirmedMood || "Neutral", "")}
+              >
                 <Icon name="check" /> Yes, let's continue
               </button>
               <button
@@ -350,6 +405,15 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
                 onClick={() => setManualMode(true)}
               >
                 Not quite? Pick your mood manually
+              </button>
+            </div>
+          ) : selected ? (
+            <div className="prediction-panel">
+              <span className="eyebrow">MOOD SELECTED</span>
+              <h2>{moodData[selected].name} ({moodData[selected].mood})</h2>
+              <h3>Ready to continue?</h3>
+              <button className="answer-yes chosen" onClick={() => confirm(moodData[selected].mood as SupportedMood, "")}>
+                <Icon name="check" /> Yes, let's continue
               </button>
             </div>
           ) : (
@@ -371,15 +435,27 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
           <div className="manual-heading">
             <span className="eyebrow">YOUR CALL</span>
             <h2>What’s actually going on inside?</h2>
-            <p>The camera can suggest. You’re the expert on you.</p>
+            <p>The models suggest. You’re the expert on you.</p>
           </div>
           <div className="manual-moods">
-            {(Object.keys(moodData) as Mood[]).map((m) => (
-              <button key={m} className={selected === m ? "selected" : ""} style={{ "--mood": moodData[m].color } as React.CSSProperties} onClick={() => select(m)}>
-                <Mascot type={m} size={120} /><span>{moodData[m].name}</span><small>{moodData[m].mood}</small>
-                <i><Icon name="check" size={16} /></i>
-              </button>
-            ))}
+            {supportedMoods.map((m) => {
+              const themeKey = FRONTEND_MOOD_TO_THEME[m] || "cloudy";
+              return (
+                <button
+                  key={m}
+                  className={confirmedMood === m ? "selected" : ""}
+                  style={{ "--mood": moodData[themeKey].color } as React.CSSProperties}
+                  onClick={() => {
+                    setConfirmedMood(m);
+                    select(themeKey);
+                  }}
+                >
+                  <Mascot type={themeKey} size={120} />
+                  <span>{m}</span>
+                  <i><Icon name="check" size={16} /></i>
+                </button>
+              );
+            })}
           </div>
           <div className="context-note">
             <label htmlFor="mood-note"><span>Want to tell us a little more?</span><small>Optional · just for you</small></label>
@@ -388,8 +464,8 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
           </div>
           <div className="mood-finish">
             <div><span className="eyebrow">UP NEXT</span><h3>Alright, let’s find something that might help.</h3></div>
-            <button className="primary" disabled={!selected} onClick={() => confirm(note)}>
-              Continue with {selected ? moodData[selected].name : "my mood"} <Icon name="arrow" />
+            <button className="primary" disabled={!confirmedMood} onClick={() => confirm(confirmedMood || "Neutral", note)}>
+              Continue with {confirmedMood || "my mood"} <Icon name="arrow" />
             </button>
           </div>
         </section>
@@ -400,23 +476,24 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
 
 function Results({
   mood,
+  confirmedMood,
   go,
   setActivity,
+  onStartActivity,
 }: {
   mood: Mood;
+  confirmedMood?: SupportedMood;
   go: (p: Page) => void;
   setActivity?: (id: string) => void;
+  onStartActivity?: (id: string, title: string) => void;
 }) {
   const data = resultCopy[mood];
-  // For Cloudy (Sad), recommend Meme Recreation Studio as the #1 featured activity
-  const recommended =
-    mood === "cloudy"
-      ? [
-          activities.find((a) => a.id === "meme") || activities[0],
-          activities.find((a) => a.id === "box-breathing") || activities[1],
-          activities.find((a) => a.id === "doodle") || activities[2],
-        ]
-      : activities.slice(0, 3);
+  const recommendedMeta = getRecommendedActivity(confirmedMood || "Sad");
+
+  // Put the exact recommended activity as #1 featured
+  const featuredAct = activities.find((a) => a.id === recommendedMeta.id) || activities[0];
+  const otherActs = activities.filter((a) => a.id !== featuredAct.id).slice(0, 2);
+  const displayed = [featuredAct, ...otherActs];
 
   return (
     <div className="page results-page">
@@ -426,24 +503,34 @@ function Results({
           <span className="pill white">CHECK-IN COMPLETE</span>
           <h1>{data.title}</h1>
           <p>{data.text}</p>
-          <div className="result-feeling"><i style={{ background: moodData[mood].color }} />{moodData[mood].mood} · just now</div>
+          <div className="result-feeling">
+            <i style={{ background: moodData[mood].color }} />
+            {confirmedMood || moodData[mood].mood} · just now
+          </div>
         </div>
       </section>
       <div className="section-heading">
         <div>
-          <span className="eyebrow">A FEW GENTLE IDEAS</span>
+          <span className="eyebrow">RECOMMENDED FOR YOU</span>
           <h2>Let’s turn this feeling<br />into something.</h2>
-          <p>Pick one, save one for later, or simply take a pause.</p>
+          <p>Recommended based on your confirmed mood: <b>{confirmedMood || "Neutral"}</b></p>
         </div>
       </div>
       <div className="recommend-grid">
-        {recommended.map((a, i) => (
+        {displayed.map((a, i) => (
           <ActivityCard
             key={a.title}
             activity={a}
             onStart={() => {
-              setActivity?.(a.id);
-              go("activity");
+              if (a.id === "meme") {
+                setActivity?.("meme");
+                go("activity");
+              } else if (onStartActivity) {
+                onStartActivity(a.id, a.title);
+              } else {
+                setActivity?.(a.id);
+                go("activity");
+              }
             }}
             featured={i === 0}
           />
@@ -590,7 +677,7 @@ function MemeChallenge({ go }: { go: (p: Page) => void }) {
           </div>
 
           {!capturedMood ? (
-            <CameraPanel onPrediction={(m) => setCapturedMood(m)} onError={() => alert("Couldn't access camera.")} />
+            <CameraPanel onPrediction={(res) => setCapturedMood(FRONTEND_MOOD_TO_THEME[res.frontendMood])} onError={() => alert("Couldn't access camera.")} />
           ) : (
             <div style={{ textAlign: "center", background: "#f0fdf4", padding: "2rem", borderRadius: 20 }}>
               <h2 style={{ color: "#166534" }}>Great job!</h2>
@@ -804,7 +891,9 @@ export default function App() {
   const [userName, setUserName] = useState("Friend");
   const [page, setPage] = useState<Page>("home");
   const [selected, setSelected] = useState<Mood | null>(null);
-  const [activeActivity, setActiveActivity] = useState<string>("box-breathing");
+  const [hybridResult, setHybridResult] = useState<HybridMoodResult | null>(null);
+  const [confirmedMood, setConfirmedMood] = useState<SupportedMood>("Sad");
+  const [activeActivity, setActiveActivity] = useState<string>("meme");
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -863,28 +952,32 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function confirm(note: string) {
-    if (!selected) return;
+  async function confirm(moodChoice: SupportedMood, note: string) {
+    setConfirmedMood(moodChoice);
     setToast("Check-in saved. Thanks for sharing.");
-    // Route to the corresponding activity page!
-    if (selected === "cloudy") {
+    const rec = getRecommendedActivity(moodChoice);
+
+    // If Sad or Overwhelmed, directly go to Meme Recreation Studio!
+    if (rec.id === "meme") {
       setActiveActivity("meme");
-      go("activity");
-    } else if (selected === "sunny") {
-      setActiveActivity("shake");
-      go("activity");
-    } else if (selected === "spark") {
-      setActiveActivity("doodle");
-      go("activity");
-    } else if (selected === "wiggles") {
-      setActiveActivity("box-breathing");
       go("activity");
     } else {
       go("results");
     }
+
     setTimeout(() => setToast(""), 3500);
-    // Save to Supabase
-    await saveMoodEntry(selected, note);
+    const themeKey = FRONTEND_MOOD_TO_THEME[moodChoice as keyof typeof FRONTEND_MOOD_TO_THEME] || "cloudy";
+    await saveMoodEntry(themeKey, note);
+  }
+
+  function handleStartActivity(id: string, title: string) {
+    if (id === "meme") {
+      setActiveActivity("meme");
+      go("activity");
+    } else {
+      setToast(`${title} is coming soon! Try Meme Recreation Studio.`);
+      setTimeout(() => setToast(""), 3500);
+    }
   }
 
   async function handleSignOut() {
@@ -920,8 +1013,26 @@ export default function App() {
           initials={initials}
         />
         {page === "home" && <Home go={go} displayName={userName} />}
-        {page === "checkin" && <MoodCheckin selected={selected} select={setSelected} confirm={confirm} />}
-        {page === "results" && <Results mood={selected || "cloudy"} go={go} setActivity={setActiveActivity} />}
+        {page === "checkin" && (
+          <MoodCheckin
+            selected={selected}
+            select={setSelected}
+            confirm={confirm}
+            hybridResult={hybridResult}
+            setHybridResult={setHybridResult}
+            confirmedMood={confirmedMood}
+            setConfirmedMood={setConfirmedMood}
+          />
+        )}
+        {page === "results" && (
+          <Results
+            mood={selected || "cloudy"}
+            confirmedMood={confirmedMood}
+            go={go}
+            setActivity={setActiveActivity}
+            onStartActivity={handleStartActivity}
+          />
+        )}
         {page === "activities" && <Activities go={go} setActivity={setActiveActivity} />}
         {page === "activity" && renderActivity()}
         {page === "insights" && <Insights />}

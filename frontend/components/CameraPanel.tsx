@@ -1,15 +1,14 @@
-
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useExpression } from "@/hooks/useExpression";
-import { EXPRESSION_TO_MOOD } from "@/lib/mood";
+import type { HybridMoodResult } from "@/lib/mood";
 
 export function CameraPanel({
   onPrediction,
   onError,
 }: {
-  onPrediction: (mood: any) => void;
+  onPrediction: (result: HybridMoodResult) => void;
   onError: (msg: string) => void;
 }) {
   const [cameraState, setCameraState] = useState<
@@ -18,108 +17,121 @@ export function CameraPanel({
 
   const [cameraError, setCameraError] = useState("");
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const sessionIdRef = useRef(0);
   const predictionHandledRef = useRef(false);
 
-  const expr = useExpression(
-    videoRef,
-    cameraState === "waiting" || cameraState === "analyzing"
-  );
+  const isLive = cameraState === "waiting" || cameraState === "analyzing";
+  const expr = useExpression(videoRef, isLive);
 
-  const prediction = EXPRESSION_TO_MOOD[expr.label ?? "neutral"];
+  // Stop camera and cleanly release all hardware tracks
+  const stopCamera = useCallback(() => {
+    sessionIdRef.current += 1;
 
-  // Request camera access
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {
+          // ignore
+        }
+      });
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    expr.reset();
+    setCameraState("idle");
+  }, [expr]);
+
+  // Request camera access - works on FIRST click every time
   async function enableCamera() {
-    setCameraState("requesting");
-    setCameraError("");
+    const session = ++sessionIdRef.current;
     predictionHandledRef.current = false;
+    setCameraError("");
+    setCameraState("requesting");
+    expr.reset();
+
+    // Release any lingering prior tracks if any existed
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch (e) {}
+      });
+      streamRef.current = null;
+    }
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Camera unavailable");
+        throw new Error("Camera is unavailable on this device.");
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: "user",
+        },
         audio: false,
       });
 
-      streamRef.current = stream;
-
-      console.log("Camera stream obtained:", stream.active);
-
-      // React will render the video element after this state update.
-      setCameraState("waiting");
-
-    } catch (error) {
-      console.error("Camera access error:", error);
-
-      setCameraError(
-        "We couldn’t open your camera. Check your browser permission, or choose manually."
-      );
-
-      setCameraState("error");
-      onError("Camera access denied.");
-    }
-  }
-
-  // Attach stream after the video element has rendered
-  useEffect(() => {
-    if (cameraState !== "waiting") return;
-
-    const video = videoRef.current;
-    const stream = streamRef.current;
-
-    if (!video || !stream) {
-      console.error("Video element or camera stream is missing.");
-      return;
-    }
-
-    const currentVideo = video;
-    const currentStream = stream;
-
-    async function startVideo() {
-      try {
-        currentVideo.srcObject = currentStream;
-
-        await currentVideo.play();
-
-        console.log("Video playback started!");
-        console.log("Video readyState:", currentVideo.readyState);
-        console.log("Video dimensions:", currentVideo.videoWidth, currentVideo.videoHeight);
-
-      } catch (error) {
-        console.error("Video playback failed:", error);
-
-        setCameraError(
-          "Your camera opened, but the video could not start. Please try again."
-        );
-
-        currentStream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-
-        setCameraState("error");
-        onError("Camera video playback failed.");
+      // Discard if session changed while awaiting getUserMedia
+      if (sessionIdRef.current !== session) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
       }
+
+      streamRef.current = stream;
+      setCameraState("waiting");
+    } catch (error: any) {
+      if (sessionIdRef.current !== session) return;
+
+      console.error("Camera access error:", error);
+      const isDenied =
+        error?.name === "NotAllowedError" ||
+        error?.name === "PermissionDeniedError";
+
+      const msg = isDenied
+        ? "Camera permission was denied. Please allow camera access in your browser settings, or select your mood manually."
+        : "We couldn’t open your camera. Please check your webcam and try again.";
+
+      setCameraError(msg);
+      setCameraState("error");
+      onError(msg);
     }
-
-    startVideo();
-  }, [cameraState, onError]);
-
-  // Stop camera
-  function stopCamera() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    setCameraState("idle");
   }
 
-  // Handle expression detection and prediction
+  // Ref callback to immediately bind stream and start playback as soon as video DOM node mounts
+  const handleVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node && streamRef.current && node.srcObject !== streamRef.current) {
+      node.srcObject = streamRef.current;
+      node
+        .play()
+        .then(() => {
+          console.log("Camera video stream playing smoothly.");
+        })
+        .catch((err: any) => {
+          if (err?.name === "AbortError") {
+            // Normal when playback is interrupted or re-rendered
+            return;
+          }
+          console.warn("Video playback notice:", err);
+        });
+    }
+  }, []);
+
+  // Synchronize internal expression phase with camera state
   useEffect(() => {
     if (cameraState !== "waiting" && cameraState !== "analyzing") {
       return;
@@ -143,30 +155,45 @@ export function CameraPanel({
 
     if (
       expr.phase === "prediction" &&
+      expr.frontendMood &&
+      expr.backendPrediction &&
+      expr.features &&
       !predictionHandledRef.current
     ) {
       predictionHandledRef.current = true;
 
-      console.log("Expression prediction:", expr.label);
-      console.log("Mapped mood:", prediction);
+      onPrediction({
+        frontendMood: expr.frontendMood,
+        backendPrediction: expr.backendPrediction,
+        features: expr.features,
+      });
 
-      onPrediction(prediction);
       stopCamera();
     }
-  }, [expr.phase, expr.error, expr.label, cameraState, prediction, onPrediction]);
+  }, [
+    expr.phase,
+    expr.error,
+    expr.frontendMood,
+    expr.backendPrediction,
+    expr.features,
+    cameraState,
+    onPrediction,
+    stopCamera,
+    onError,
+  ]);
 
-  // Clean up camera when component unmounts
+  // Clean up on component unmount
   useEffect(() => {
     return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      sessionIdRef.current += 1;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
     };
   }, []);
 
-  const cameraActive = [
-    "waiting",
-    "analyzing",
-    "prediction",
-  ].includes(cameraState);
+  const cameraActive = ["waiting", "analyzing", "prediction"].includes(cameraState);
 
   return (
     <div className={`ai-camera ${cameraActive ? "is-live" : ""}`}>
@@ -178,7 +205,7 @@ export function CameraPanel({
       {cameraActive ? (
         <>
           <video
-            ref={videoRef}
+            ref={handleVideoRef}
             autoPlay
             muted
             playsInline
@@ -188,24 +215,20 @@ export function CameraPanel({
             <i /> LIVE
           </div>
 
-          <button className="camera-close" onClick={stopCamera}>
+          <button className="camera-close" onClick={stopCamera} title="Close camera">
             <span>×</span>
           </button>
 
-          {(cameraState === "analyzing" ||
-            cameraState === "prediction") && (
+          {(cameraState === "analyzing" || cameraState === "prediction") && (
             <div className="face-map" aria-hidden="true">
               <div className="face-oval" />
-
               <svg viewBox="0 0 100 100">
                 <path d="M34 42 Q39 38 44 42 M56 42 Q61 38 66 42 M39 67 Q50 76 61 67" />
               </svg>
             </div>
           )}
 
-          {cameraState === "waiting" && (
-            <div className="scan-line" />
-          )}
+          {cameraState === "waiting" && <div className="scan-line" />}
 
           <div className={`camera-status status-${cameraState}`}>
             <span className="status-pulse">
@@ -220,8 +243,7 @@ export function CameraPanel({
                   ? "Looking for you…"
                   : "Analyzing expression…"}
               </b>
-
-              <small>Please hold still.</small>
+              <small>MediaPipe landmarks + Random Forest check</small>
             </div>
           </div>
         </>
@@ -234,17 +256,13 @@ export function CameraPanel({
                 <i />
                 <i />
               </div>
-
               <h2>Asking for camera access…</h2>
             </>
           ) : cameraState === "error" ? (
             <>
               <span className="camera-empty-icon error">📷</span>
-
               <h2>Camera’s feeling shy.</h2>
-
               <p>{cameraError}</p>
-
               <button className="primary" onClick={enableCamera}>
                 Try again
               </button>
@@ -252,11 +270,8 @@ export function CameraPanel({
           ) : (
             <>
               <span className="camera-empty-icon">📷</span>
-
               <h2>Your check-in starts here.</h2>
-
               <p>Nothing starts until you say so.</p>
-
               <button
                 className="primary camera-start"
                 onClick={enableCamera}

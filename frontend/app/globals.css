@@ -3437,3 +3437,6 @@ main {
 .crystal-actions button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px; background: transparent; border: 1px solid transparent; border-radius: 12px; font-size: 14px; font-weight: 700; color: #20213F; cursor: pointer; transition: all 0.2s; }
 .crystal-actions button:hover { background: #fff; border-color: #e5e7eb; }
 .pill.pink { background: #FFB0E0; color: #20213F; }
+
+
+
