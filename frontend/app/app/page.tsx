@@ -8,6 +8,7 @@ import { MemeStudio } from "@/components/MemeStudio/MemeStudio";
 import { BubbleBurst } from "@/components/BubbleBurst/BubbleBurst";
 import { MoveMatch } from "@/components/MoveMatch/MoveMatch";
 import { AirPainter } from "@/components/AirPainter/AirPainter";
+import { fetchMoodEntries, computeInsights, type MoodEntry, type MoodKey } from "@/lib/insights";
 
 import {
   type HybridMoodResult,
@@ -423,28 +424,28 @@ function Home({
   );
 }
 
-function WeeklyMood() {
-  const days: [string, Mood][] = [["M","cloudy"],["T","sunny"],["W","wiggles"],["T","cloudy"],["F","spark"],["S","sunny"],["S","cloudy"]];
-  return (
-    <section className="card weekly">
-      <div className="card-heading">
-        <div><span className="eyebrow">THIS WEEK</span><h3>Your mood rhythm</h3></div>
-        <span className="supportive">No right or wrong feelings</span>
-      </div>
-      <div className="mood-bars">
-        {days.map(([d, m], i) => (
-          <div key={i}>
-            <div className="bar-track"><span style={{ height: `${[55,82,68,48,62,88,58][i]}%`, background: moodData[m].color }} /></div>
-            <small>{d}</small>
-          </div>
-        ))}
-      </div>
-      <div className="mood-legend">
-        {(["sunny","cloudy","spark","wiggles"] as Mood[]).map((m) => <span key={m}><i style={{ background: moodData[m].color }} />{moodData[m].mood}</span>)}
-      </div>
-    </section>
-  );
-}
+// function WeeklyMood() {
+//   const days: [string, Mood][] = [["M","cloudy"],["T","sunny"],["W","wiggles"],["T","cloudy"],["F","spark"],["S","sunny"],["S","cloudy"]];
+//   return (
+//     <section className="card weekly">
+//       <div className="card-heading">
+//         <div><span className="eyebrow">THIS WEEK</span><h3>Your mood rhythm</h3></div>
+//         <span className="supportive">No right or wrong feelings</span>
+//       </div>
+//       <div className="mood-bars">
+//         {days.map(([d, m], i) => (
+//           <div key={i}>
+//             <div className="bar-track"><span style={{ height: `${[55,82,68,48,62,88,58][i]}%`, background: moodData[m].color }} /></div>
+//             <small>{d}</small>
+//           </div>
+//         ))}
+//       </div>
+//       <div className="mood-legend">
+//         {(["sunny","cloudy","spark","wiggles"] as Mood[]).map((m) => <span key={m}><i style={{ background: moodData[m].color }} />{moodData[m].mood}</span>)}
+//       </div>
+//     </section>
+//   );
+// }
 
 function MoodCheckin({
   select,
@@ -847,40 +848,141 @@ function DoodleActivity({ go }: { go: (p: Page) => void }) {
   );
 }
 
-function Insights() {
-  const calendar = [null,"sunny","cloudy","wiggles","cloudy","spark","sunny","cloudy","sunny",null,"wiggles","cloudy","sunny","sunny","spark","cloudy","wiggles","sunny","cloudy",null,"spark","wiggles","sunny","cloudy","cloudy","sunny","spark","sunny"];
+function WeeklyMood({ days }: { days: { label: string; mood: MoodKey | null; count: number; isToday: boolean }[] }) {
+  return (
+    <section className="card weekly">
+      <div className="card-heading">
+        <div><span className="eyebrow">THIS WEEK</span><h3>Your mood rhythm</h3></div>
+        <span className="supportive">No right or wrong feelings</span>
+      </div>
+      <div className="mood-bars">
+        {days.map((d, i) => (
+          <div key={i} title={d.count ? `${d.count} check-in${d.count === 1 ? "" : "s"}` : "No check-in"}>
+            <div className="bar-track">
+              <span style={{ height: d.mood ? `${Math.min(100, 45 + d.count * 18)}%` : "6%", background: d.mood ? moodData[d.mood].color : "#E9E3D6" }} />
+            </div>
+            <small style={d.isToday ? { fontWeight: 800 } : undefined}>{d.label}</small>
+          </div>
+        ))}
+      </div>
+      <div className="mood-legend">
+        {(["sunny", "cloudy", "spark", "wiggles"] as Mood[]).map((m) => <span key={m}><i style={{ background: moodData[m].color }} />{moodData[m].mood}</span>)}
+      </div>
+    </section>
+  );
+}
+
+function Insights({ go }: { go: (p: Page) => void }) {
+  const [entries, setEntries] = useState<MoodEntry[] | null>(null);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
+
+  // Re-read the signed-in user's check-ins whenever this page opens, on retry, and when the tab regains focus.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const result = await fetchMoodEntries();
+      if (cancelled) return;
+      if (result.ok) { setEntries(result.entries); setError(""); }
+      else setError(result.error);
+    }
+    load();
+    window.addEventListener("focus", load);
+    return () => { cancelled = true; window.removeEventListener("focus", load); };
+  }, [reload]);
+
+  if (entries === null) {
+    return (
+      <div className="page insights-page">
+        <section className="page-intro">
+          <span className="pill mint">YOUR PATTERNS</span>
+          {error ? (
+            <>
+              <h1>We couldn’t load<br /><em>your insights.</em></h1>
+              <p>{error}</p>
+              <button className="primary" onClick={() => { setError(""); setReload((n) => n + 1); }}>Try again</button>
+            </>
+          ) : (
+            <h1>Gathering your<br /><em>inner weather…</em></h1>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  const s = computeInsights(entries, monthOffset);
+
+  if (s.total === 0) {
+    return (
+      <div className="page insights-page">
+        <section className="page-intro">
+          <span className="pill mint">YOUR PATTERNS</span>
+          <h1>Nothing here yet,<br /><em>and that’s okay.</em></h1>
+          <p>Your patterns will show up here after your first check-in.</p>
+          <button className="primary" onClick={() => go("checkin")}>Do your first check-in</button>
+        </section>
+      </div>
+    );
+  }
+
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
   return (
     <div className="page insights-page">
       <section className="page-intro">
         <span className="pill mint">YOUR PATTERNS</span>
         <h1>Your feelings have been<br /><em>doing their thing.</em></h1>
-        <p>A curious look at your inner weather — never a scorecard.</p>
+        <p>A curious look at your inner weather — never a scorecard. Mood breakdown covers your last 30 days.</p>
       </section>
       <section className="insight-banner">
         <Mascot type="sunny" size={105} mood="excited" />
-        <div><span className="eyebrow">A LITTLE CELEBRATION</span><h2>You’ve made time for yourself three times this week!</h2><p>Every check-in is a moment of self-awareness.</p></div>
-        <div className="big-number">3<span>check-ins</span></div>
+        <div>
+          <span className="eyebrow">{s.weekCount > 0 ? "A LITTLE CELEBRATION" : "A GENTLE NUDGE"}</span>
+          <h2>
+            {s.weekCount === 0
+              ? "No check-ins yet this week."
+              : `You’ve made time for yourself ${s.weekCount === 1 ? "once" : `${s.weekCount} times`} this week!`}
+          </h2>
+          <p>{s.streak > 0 ? `You’re on a ${s.streak}-day streak.` : "Every check-in is a moment of self-awareness."}</p>
+        </div>
+        <div className="big-number">{s.weekCount}<span>{s.weekCount === 1 ? "check-in" : "check-ins"}</span></div>
       </section>
       <div className="stat-grid">
-        {(["sunny","cloudy","spark","wiggles"] as Mood[]).map((m, i) => (
-          <div className="emotion-stat" key={m} style={{ "--mood": moodData[m].color } as React.CSSProperties}>
-            <Mascot type={m} size={65} /><div><span>{moodData[m].mood}</span><b>{[4,5,2,3][i]} times</b></div><small>{[29,36,14,21][i]}%</small>
+        {s.breakdown.map(({ mood, count, percent }) => (
+          <div className="emotion-stat" key={mood} style={{ "--mood": moodData[mood].color } as React.CSSProperties}>
+            <Mascot type={mood} size={65} />
+            <div><span>{moodData[mood].mood}</span><b>{plural(count, "time", "times")}</b></div>
+            <small>{percent}%</small>
           </div>
         ))}
       </div>
       <div className="insights-grid">
-        <WeeklyMood />
+        <WeeklyMood days={s.week} />
         <section className="card calendar">
-          <div className="card-heading"><div><span className="eyebrow">MAY 2025</span><h3>Mood calendar</h3></div><button className="round-arrow">›</button></div>
+          <div className="card-heading">
+            <div><span className="eyebrow">{s.month.label.toUpperCase()}</span><h3>Mood calendar</h3></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="round-arrow" aria-label="Previous month" disabled={monthOffset <= -11} onClick={() => setMonthOffset((o) => o - 1)}>‹</button>
+              <button className="round-arrow" aria-label="Next month" disabled={monthOffset >= 0} onClick={() => setMonthOffset((o) => o + 1)}>›</button>
+            </div>
+          </div>
           <div className="calendar-days">
-            {["M","T","W","T","F","S","S"].map((d, i) => <b key={i}>{d}</b>)}
-            {calendar.map((m, i) => <span key={i} className={m ? "has-mood" : ""}>{i + 1}{m && <i style={{ background: moodData[m as Mood].color }} />}</span>)}
+            {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => <b key={i}>{d}</b>)}
+            {s.month.cells.map((c, i) =>
+              c.day === null ? <span key={i} /> : (
+                <span key={i} className={c.mood ? "has-mood" : ""} title={c.count ? `${c.count} check-in${c.count === 1 ? "" : "s"}` : undefined}>
+                  {c.day}{c.mood && <i style={{ background: moodData[c.mood].color }} />}
+                </span>
+              )
+            )}
           </div>
         </section>
       </div>
     </div>
   );
 }
+
 
 function ProfileSettings({
   settings = false, go, onSignOut, displayName, initials,
@@ -1095,18 +1197,6 @@ export default function App() {
     await saveMoodEntry(themeKey, note);
   }
 
-  // function handleStartActivity(id: string, title: string) {
-  //   if (id === "cloud-catcher" || id === "meme" || id === "bubble-burst" || id === "move-match") {
-  //     setActiveActivity(id);
-  //     go("activity");
-  //   } else {
-  //     setToast(`${title} is coming soon! `);
-  //     setTimeout(() => setToast(""), 3500);
-  //   }
-  // }
-
-
-
   function handleStartActivity(id: string, title: string) {
     if (
       id === "cloud-catcher" ||
@@ -1182,7 +1272,7 @@ export default function App() {
         )}
         {page === "activities" && <Activities go={go} setActivity={setActiveActivity} />}
         {page === "activity" && renderActivity()}
-        {page === "insights" && <Insights />}
+        {page === "insights" && <Insights go={go} />}
         {page === "profile" && (
           <ProfileSettings
             go={go}
