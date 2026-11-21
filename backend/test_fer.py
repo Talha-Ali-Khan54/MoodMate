@@ -48,3 +48,5 @@ for category in categories:
     print("Total images:", len(image_paths))
     print("Successfully processed:", successful)
     print("Failed:", failed)
+
+

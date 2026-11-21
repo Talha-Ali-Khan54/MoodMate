@@ -30,6 +30,10 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
+  // Fullscreen / Maximize Screen State
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const screenContainerRef = useRef<HTMLDivElement | null>(null);
+
   // Camera & Tracking states
   const [cameraState, setCameraState] = useState<"idle" | "requesting" | "ready" | "error">("idle");
   const [cameraError, setCameraError] = useState("");
@@ -82,7 +86,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
     setCameraState("requesting");
     setCameraReady(false);
 
-    // Stop lingering tracks if any
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => {
         try {
@@ -106,7 +109,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
         audio: false,
       });
 
-      // Discard if session changed while awaiting getUserMedia
       if (sessionIdRef.current !== session) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -149,7 +151,28 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
     }
   }, []);
 
-  // Callback ref for video element to immediately bind stream
+  // Fullscreen / Maximize toggle
+  const toggleMaximize = useCallback(() => {
+    const elem = screenContainerRef.current;
+    if (!elem) return;
+
+    if (!document.fullscreenElement) {
+      elem.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  // Sync fullscreen change state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Callback ref for video element
   const handleVideoRef = useCallback((node: HTMLVideoElement | null) => {
     videoRef.current = node;
     if (node) {
@@ -206,7 +229,7 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
     startCamera();
   }, [startCamera]);
 
-  // Restart game session while currently in game
+  // Restart game session while playing
   const restartGame = useCallback(() => {
     setScore(0);
     setPoppedCount(0);
@@ -230,7 +253,9 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
         if (prev <= 1) {
           clearInterval(timerIntervalRef.current!);
           timerIntervalRef.current = null;
-          // Game finished!
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+          }
           stopCamera();
           soundManager.playCelebration();
           setScreen("results");
@@ -256,12 +281,11 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
     setScore((s) => s + pts);
     setPoppedCount((p) => p + 1);
 
-    // Combo streak logic (within 1.8 seconds)
+    // Combo streak logic
     setCombo((currentCombo) => {
       const newCombo = timeSinceLast < 1800 ? currentCombo + 1 : 1;
       setMaxCombo((max) => Math.max(max, newCombo));
 
-      // Occasional encouraging feedback toast
       if (newCombo === 3 || newCombo === 6 || newCombo === 10 || isSpecial) {
         const item = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)];
         setToast({
@@ -291,6 +315,9 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   // Clean up completely on component unmount
   useEffect(() => {
     return () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
       stopCamera();
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
@@ -298,7 +325,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
     };
   }, [stopCamera]);
 
-  // Call onFinish callback if provided
   useEffect(() => {
     if (screen === "results") {
       onFinish?.({ score, popped: poppedCount });
@@ -311,7 +337,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   if (screen === "intro") {
     return (
       <div className="page activity-page max-w-5xl mx-auto px-4 py-6">
-        {/* Navigation Bar */}
         <div className="flex items-center justify-between mb-5">
           <button
             onClick={() => go("activities")}
@@ -330,14 +355,12 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           </button>
         </div>
 
-        {/* Hero Card */}
         <div className="bg-[#FFFDF8] rounded-3xl border-2 border-[#20213F] p-6 md:p-8 shadow-[8px_9px_0px_#20213F] mb-6 relative overflow-hidden">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-            {/* Left Content */}
             <div className="md:col-span-7 space-y-4">
               <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFE0D9] border border-[#FF765E] text-[#FF765E] font-extrabold text-xs uppercase tracking-wider">
                 <span>🔥</span>
-                <span>Stress & Frustration Release</span>
+                <span>Stress &amp; Frustration Release</span>
               </div>
 
               <h1 className="text-4xl md:text-5xl font-extrabold text-[#20213F] font-fredoka leading-tight">
@@ -345,60 +368,57 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
               </h1>
 
               <p className="text-lg md:text-xl text-[#20213F]/85 font-medium leading-relaxed">
-                Take a moment, wave your hands, and burst away the bubbles!
+                Take a moment, point your index fingers, and pop away tension!
               </p>
 
               <p className="text-sm text-[#20213F]/75 leading-relaxed">
-                Feeling tense or frustrated? Point, swipe, and pop floating bubbles directly with your hands through your webcam. Fast gestures pop bubbles instantly!
+                Feeling tense or frustrated? Point directly with your index finger (using one or both hands) to burst floating stress bubbles through your webcam in real time.
               </p>
 
-              {/* Instructions Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
-                    <span>🖐</span> Wave Both Hands
+                    <span>☝️</span> Index Finger Tracking
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    MediaPipe tracks your fingertips and palms with continuous swipe detection.
+                    Use 1 index finger with one hand, or 2 index fingers with both hands.
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
-                    <span>🫧</span> Pop for Points
+                    <span>⛶</span> Fullscreen Mode
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    Small bubbles: 30 pts, Medium: 20 pts, Large: 10 pts, Golden Sparks: 50 pts!
+                    Maximize canvas across your monitor for immersive stress popping.
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
-                    <span>⏱</span> 30-Second Rush
+                    <span>🫧</span> Balanced Bubble Rush
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    A quick burst to refocus energy and release physical tension.
+                    5 floating bubbles at a time. Aim and pop them with precision!
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
-                    <span>🛡</span> 100% On-Device
+                    <span>🛡️</span> 100% On-Device
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    Your camera feed stays completely in your browser. No video is ever saved.
+                    Your camera feed stays completely in your browser. No video is saved.
                   </p>
                 </div>
               </div>
 
-              {/* Camera Note & HIGH-VISIBILITY Start CTA */}
               <div className="pt-4 space-y-3">
                 <div className="flex items-center gap-2 text-xs text-[#20213F]/70">
                   <span>📷</span>
                   <span>Camera activates only when you click Start Game below.</span>
                 </div>
 
-                {/* Primary Start Button: Explicit high-contrast vivid Coral styling */}
                 <button
                   type="button"
                   onClick={startGame}
@@ -416,7 +436,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
               </div>
             </div>
 
-            {/* Right Mascot Artwork */}
             <div className="md:col-span-5 flex flex-col items-center justify-center text-center p-6 bg-[#FFE0D9]/50 rounded-2xl border-2 border-[#20213F]">
               <div className="relative w-44 h-44 flex items-center justify-center">
                 <svg
@@ -449,7 +468,7 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
                   Feeling heated?
                 </span>
                 <span className="text-xs text-[#20213F]/75">
-                  Channel that high-intensity energy into popped bubbles!
+                  Point and pop those bubbles!
                 </span>
               </div>
             </div>
@@ -460,19 +479,25 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   }
 
   /* ========================================================================= */
-  /* SCREEN 2: ACTIVE GAME (Fitted to Browser Size - No Overflow Scrolling)    */
+  /* SCREEN 2: ACTIVE GAME (With Fullscreen Maximize Support)                  */
   /* ========================================================================= */
   if (screen === "playing") {
     const progressPercent = (timeRemaining / 30) * 100;
 
     return (
       <div
-        className="page activity-page max-w-6xl mx-auto px-3 py-1 flex flex-col overflow-hidden"
-        style={{ height: "calc(100vh - 80px)", maxHeight: "calc(100dvh - 80px)" }}
+        ref={screenContainerRef}
+        className={`page activity-page max-w-6xl mx-auto px-3 py-1 flex flex-col overflow-hidden bg-[#FFFDF8] ${
+          isFullscreen ? "fixed inset-0 z-50 max-w-none w-screen h-screen p-4" : ""
+        }`}
+        style={{
+          height: isFullscreen ? "100vh" : "calc(100vh - 80px)",
+          maxHeight: isFullscreen ? "100vh" : "calc(100dvh - 80px)",
+        }}
       >
         {/* Top Game HUD Bar */}
         <div className="shrink-0 bg-[#FFFDF8] rounded-2xl border-2 border-[#20213F] px-4 py-2.5 shadow-[4px_4px_0px_#20213F] flex flex-wrap items-center justify-between gap-3 mb-2">
-          {/* Left: Pause, Restart, Mute */}
+          {/* Left: Pause, Restart, Maximize, Mute */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsPaused((p) => !p)}
@@ -491,6 +516,17 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
               title="Restart session"
             >
               🔄 Reset
+            </button>
+
+            {/* Maximize Button */}
+            <button
+              onClick={toggleMaximize}
+              style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+              className="py-1.5 px-3 rounded-xl font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] cursor-pointer flex items-center gap-1.5"
+              title={isFullscreen ? "Exit Fullscreen" : "Maximize Screen"}
+            >
+              <span>{isFullscreen ? "⤡" : "⛶"}</span>
+              <span>{isFullscreen ? "Restore" : "Maximize"}</span>
             </button>
 
             <button
@@ -512,7 +548,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
               </span>
             </div>
 
-            {/* Circular/Linear Progress Bar */}
             <div className="w-20 md:w-32 h-2.5 bg-[#E8E2D5] rounded-full overflow-hidden border border-[#20213F]/20">
               <div
                 className="h-full bg-[#FF765E] transition-all duration-300"
@@ -539,6 +574,7 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
 
             <button
               onClick={() => {
+                if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
                 stopCamera();
                 go("activities");
               }}
@@ -551,7 +587,7 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           </div>
         </div>
 
-        {/* Main Game Screen Canvas Container: Fills 100% of remaining viewport */}
+        {/* Main Canvas Container */}
         <div className="relative flex-1 min-h-0 w-full rounded-2xl border-3 border-[#20213F] overflow-hidden bg-black shadow-[6px_7px_0px_#20213F]">
           {/* Mirrored Camera Video Feed */}
           <video
@@ -562,10 +598,9 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             className="absolute inset-0 w-full h-full object-cover -scale-x-100 z-0 opacity-80"
           />
 
-          {/* Subtle Vignette Overlay for rich bubble contrast */}
           <div className="absolute inset-0 bg-radial from-transparent via-black/20 to-black/50 pointer-events-none z-1" />
 
-          {/* Interactive Game Canvas (Bubbles, Fingertip Cursors, Particles) */}
+          {/* Canvas with Index-Finger Only Filter & 5-Bubble Limit */}
           {cameraReady && (
             <BubbleBurstCanvas
               fingertips={fingertips}
@@ -576,15 +611,13 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             />
           )}
 
-          {/* Friendly Hand Instruction Banner when hand is not detected */}
           {cameraReady && !hasHandDetected && !isPaused && (
             <div className="absolute top-4 inset-x-0 mx-auto w-fit z-20 px-5 py-2 rounded-full bg-[#20213F]/85 backdrop-blur-md text-white font-fredoka text-sm md:text-base border border-white/20 shadow-lg flex items-center gap-2 animate-pulse">
-              <span>🖐</span>
-              <span>Wave your hand to start bursting bubbles!</span>
+              <span>☝️</span>
+              <span>Point your index finger toward the camera to burst bubbles!</span>
             </div>
           )}
 
-          {/* Encouragement Floating Toast */}
           {toast && (
             <div className="absolute top-16 inset-x-0 mx-auto w-fit z-20 px-5 py-1.5 rounded-2xl bg-white/95 text-[#20213F] border-2 border-[#20213F] shadow-[3px_3px_0px_#20213F] font-fredoka text-base md:text-lg font-bold flex items-center gap-2 animate-bounce">
               <span>{toast.emoji}</span>
@@ -592,12 +625,11 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             </div>
           )}
 
-          {/* Camera Loading Overlay */}
           {cameraState === "requesting" && (
             <div className="absolute inset-0 bg-[#FFFDF8] z-30 flex flex-col items-center justify-center space-y-4 p-6 text-center">
               <div className="w-12 h-12 border-4 border-[#FF765E] border-t-transparent rounded-full animate-spin" />
               <h3 className="text-xl font-bold font-fredoka text-[#20213F]">
-                Starting camera & hand tracker…
+                Starting camera &amp; hand tracker…
               </h3>
               <p className="text-sm text-[#20213F]/70 max-w-sm">
                 Please allow camera access in your browser prompt.
@@ -605,7 +637,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             </div>
           )}
 
-          {/* Model Loading Notice */}
           {cameraState === "ready" && isModelLoading && (
             <div className="absolute inset-0 bg-black/60 z-30 flex flex-col items-center justify-center space-y-3 p-6 text-center text-white">
               <div className="w-10 h-10 border-4 border-[#FFD83D] border-t-transparent rounded-full animate-spin" />
@@ -615,7 +646,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             </div>
           )}
 
-          {/* Camera Error Display */}
           {cameraState === "error" && (
             <div className="absolute inset-0 bg-[#FFFDF8] z-30 flex flex-col items-center justify-center space-y-4 p-6 text-center">
               <span className="text-4xl">📷</span>
@@ -644,7 +674,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             </div>
           )}
 
-          {/* Paused Overlay */}
           {isPaused && (
             <div className="absolute inset-0 bg-black/60 backdrop-blur-xs z-30 flex flex-col items-center justify-center space-y-4 text-white">
               <h2 className="text-3xl font-bold font-fredoka text-[#FFD83D]">
@@ -679,14 +708,12 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   return (
     <div className="page activity-page max-w-3xl mx-auto px-4 py-8">
       <div className="bg-[#FFFDF8] rounded-3xl border-2 border-[#20213F] p-6 md:p-8 shadow-[8px_9px_0px_#20213F] space-y-7 text-center">
-        {/* Header Mascot */}
         <div className="flex justify-center">
           <div className="w-28 h-28 rounded-full bg-[#FFE0D9] border-2 border-[#20213F] flex items-center justify-center shadow-[4px_4px_0px_#20213F]">
             <span className="text-5xl animate-pulse">✨</span>
           </div>
         </div>
 
-        {/* Title & Affirmation */}
         <div className="space-y-2">
           <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#A8E6C3] border border-[#20213F]/20 text-[#20213F] uppercase tracking-wider">
             SESSION COMPLETE
@@ -699,7 +726,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           </p>
         </div>
 
-        {/* Performance Statistics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-[#FFF9ED] border-2 border-[#20213F] shadow-[3px_3px_0px_#20213F]">
             <span className="text-xs font-bold text-[#20213F]/60 block mb-1">
@@ -729,21 +755,6 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           </div>
         </div>
 
-        {/* Encouraging summary card */}
-        <div className="p-4 rounded-2xl bg-[#FFE0D9]/60 border border-[#FF765E]/30 text-sm text-[#20213F] space-y-1">
-          <b className="font-fredoka text-base block text-[#FF765E]">
-            {poppedCount >= 25
-              ? "🔥 Incredible Energy! Master Tension Buster!"
-              : poppedCount >= 15
-              ? "⚡ Great Burst Session! That tension is moving."
-              : "🌱 Nice Start! Every bubble popped creates space."}
-          </b>
-          <p className="text-xs text-[#20213F]/70">
-            Physical hand movement is a proven way to discharge adrenaline and interrupt spiraling thoughts.
-          </p>
-        </div>
-
-        {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
           <button
             onClick={startGame}
