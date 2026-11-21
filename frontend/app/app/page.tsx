@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { currentUser, signOut, saveMoodEntry } from "@/lib/auth";
 import { CameraPanel } from "@/components/CameraPanel";
+import { MemeStudio } from "@/components/MemeStudio/MemeStudio";
 
 type Page =
   | "home" | "checkin" | "results" | "activities"
@@ -102,7 +103,7 @@ const activities = [
   { id: "doodle", title: "Tiny doodle", desc: "Let your pencil wander. There is no wrong result.", time: "5 min", cat: "Get Creative", color: "#B991E8", art: "draw" },
   { id: "focus", title: "Five-sense finder", desc: "Notice what is around you, one sense at a time.", time: "3 min", cat: "Brain Boost", color: "#A8E6C3", art: "focus" },
   { id: "heart", title: "Three good things", desc: "Capture three small moments worth remembering.", time: "4 min", cat: "Gratitude & Reflection", color: "#FF9D88", art: "heart" },
-  { id: "meme", title: "Meme Recreation", desc: "Copy the expression of the character.", time: "2 min", cat: "Camera Challenge", color: "#FFB0E0", art: "camera" },
+  { id: "meme", title: "Meme Recreation Studio", desc: "Turn that low mood upside down by creating hilarious custom memes.", time: "3 min", cat: "Camera Challenge", color: "#FFB0E0", art: "camera" },
 ] as const;
 
 function ActivityArt({ type, color }: { type: string; color: string }) {
@@ -328,7 +329,7 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
         <div className="ai-intro-note"><span>01</span><p>Take a moment, face the camera and let MoodMate check in with you.</p></div>
       </section>
       <section className="ai-studio">
-        <CameraPanel onPrediction={(m) => { select(m); setManualMode(true); }} onError={() => setManualMode(true)} />
+        <CameraPanel onPrediction={(m) => { select(m); }} onError={() => setManualMode(true)} />
         <aside className="ai-guide">
           <div className="guide-mascot">
             <Mascot type={selected || "wiggles"} size={selected ? 190 : 150} mood={selected ? "excited" : "calm"} />
@@ -340,8 +341,15 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
               <h2>You’re looking {moodData[selected].mood.toLowerCase()}!</h2>
               <p>This is only a guess. It doesn’t define what you feel.</p>
               <h3>Does this match how you’re feeling?</h3>
-              <button className={`answer-yes ${selected ? "chosen" : ""}`} onClick={() => setManualMode(true)}>
+              <button className={`answer-yes ${selected ? "chosen" : ""}`} onClick={() => confirm("")}>
                 <Icon name="check" /> Yes, let's continue
+              </button>
+              <button
+                className="manual-link"
+                style={{ marginTop: 10, display: "block" }}
+                onClick={() => setManualMode(true)}
+              >
+                Not quite? Pick your mood manually
               </button>
             </div>
           ) : (
@@ -390,8 +398,26 @@ function MoodCheckin({ select, selected, confirm }: { select: (m: Mood) => void;
   );
 }
 
-function Results({ mood, go }: { mood: Mood; go: (p: Page) => void }) {
+function Results({
+  mood,
+  go,
+  setActivity,
+}: {
+  mood: Mood;
+  go: (p: Page) => void;
+  setActivity?: (id: string) => void;
+}) {
   const data = resultCopy[mood];
+  // For Cloudy (Sad), recommend Meme Recreation Studio as the #1 featured activity
+  const recommended =
+    mood === "cloudy"
+      ? [
+          activities.find((a) => a.id === "meme") || activities[0],
+          activities.find((a) => a.id === "box-breathing") || activities[1],
+          activities.find((a) => a.id === "doodle") || activities[2],
+        ]
+      : activities.slice(0, 3);
+
   return (
     <div className="page results-page">
       <section className="result-hero" style={{ "--mood": moodData[mood].color, "--soft": moodData[mood].soft } as React.CSSProperties}>
@@ -411,8 +437,16 @@ function Results({ mood, go }: { mood: Mood; go: (p: Page) => void }) {
         </div>
       </div>
       <div className="recommend-grid">
-        {activities.slice(0, 3).map((a, i) => (
-          <ActivityCard key={a.title} activity={a} onStart={() => go("activity")} featured={i === 0} />
+        {recommended.map((a, i) => (
+          <ActivityCard
+            key={a.title}
+            activity={a}
+            onStart={() => {
+              setActivity?.(a.id);
+              go("activity");
+            }}
+            featured={i === 0}
+          />
         ))}
       </div>
     </div>
@@ -832,7 +866,22 @@ export default function App() {
   async function confirm(note: string) {
     if (!selected) return;
     setToast("Check-in saved. Thanks for sharing.");
-    go("results");
+    // Route to the corresponding activity page!
+    if (selected === "cloudy") {
+      setActiveActivity("meme");
+      go("activity");
+    } else if (selected === "sunny") {
+      setActiveActivity("shake");
+      go("activity");
+    } else if (selected === "spark") {
+      setActiveActivity("doodle");
+      go("activity");
+    } else if (selected === "wiggles") {
+      setActiveActivity("box-breathing");
+      go("activity");
+    } else {
+      go("results");
+    }
     setTimeout(() => setToast(""), 3500);
     // Save to Supabase
     await saveMoodEntry(selected, note);
@@ -845,7 +894,7 @@ export default function App() {
 
   const renderActivity = () => {
     switch (activeActivity) {
-      case "meme": return <MemeChallenge go={go} />;
+      case "meme": return <MemeStudio go={go} />;
       case "doodle": return <DoodleActivity go={go} />;
       case "box-breathing":
       default: return <BreathingActivity go={go} />;
@@ -872,7 +921,7 @@ export default function App() {
         />
         {page === "home" && <Home go={go} displayName={userName} />}
         {page === "checkin" && <MoodCheckin selected={selected} select={setSelected} confirm={confirm} />}
-        {page === "results" && <Results mood={selected || "cloudy"} go={go} />}
+        {page === "results" && <Results mood={selected || "cloudy"} go={go} setActivity={setActiveActivity} />}
         {page === "activities" && <Activities go={go} setActivity={setActiveActivity} />}
         {page === "activity" && renderActivity()}
         {page === "insights" && <Insights />}

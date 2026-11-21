@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.prediction import router as prediction_router
+from app.api.meme import router as meme_router
 
 app = FastAPI()
 
@@ -22,3 +23,4 @@ def home():
     }
 
 app.include_router(prediction_router, prefix="/api")
+app.include_router(meme_router, prefix="/api")

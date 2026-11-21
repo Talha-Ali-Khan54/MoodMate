@@ -76,15 +76,18 @@ export function CameraPanel({
       return;
     }
 
+    const currentVideo = video;
+    const currentStream = stream;
+
     async function startVideo() {
       try {
-        video.srcObject = stream;
+        currentVideo.srcObject = currentStream;
 
-        await video.play();
+        await currentVideo.play();
 
         console.log("Video playback started!");
-        console.log("Video readyState:", video.readyState);
-        console.log("Video dimensions:", video.videoWidth, video.videoHeight);
+        console.log("Video readyState:", currentVideo.readyState);
+        console.log("Video dimensions:", currentVideo.videoWidth, currentVideo.videoHeight);
 
       } catch (error) {
         console.error("Video playback failed:", error);
@@ -93,7 +96,7 @@ export function CameraPanel({
           "Your camera opened, but the video could not start. Please try again."
         );
 
-        stream.getTracks().forEach((track) => track.stop());
+        currentStream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
 
         setCameraState("error");
