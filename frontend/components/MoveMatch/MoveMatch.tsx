@@ -349,6 +349,399 @@
 
 
 
+// "use client";
+
+// import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+// import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
+// import { usePoseLandmarker } from "@/hooks/usePoseLandmarker";
+// import { matchesPose, type PoseId } from "./poseMatcher";
+// import {
+//   StarStretchSVG,
+//   SideStretchSVG,
+//   StandingReachSVG,
+// } from "./PoseIllustrations";
+
+// type Screen = "intro" | "playing" | "results";
+
+// interface PoseDef {
+//   id: PoseId;
+//   name: string;
+//   instruction: string;
+//   SVG: ComponentType<{ color?: string; className?: string }>;
+//   timeoutSeconds: number;
+// }
+
+// const POSES: PoseDef[] = [
+//   {
+//     id: "star",
+//     name: "Star Stretch",
+//     instruction:
+//       "Stand with your feet apart and stretch both arms diagonally up and out — like a star.",
+//     SVG: StarStretchSVG,
+//     timeoutSeconds: 20,
+//   },
+//   {
+//     id: "side",
+//     name: "Side Stretch",
+//     instruction:
+//       "Raise one arm above your head and gently lean your body toward the opposite side.",
+//     SVG: SideStretchSVG,
+//     timeoutSeconds: 20,
+//   },
+//   {
+//     id: "reach",
+//     name: "Standing Reach",
+//     instruction:
+//       "Stand upright and reach both arms straight up above your head.",
+//     SVG: StandingReachSVG,
+//     timeoutSeconds: 20,
+//   },
+// ];
+
+// const HOLD_MS = 2500;
+// const NEXT_POSE_DELAY_MS = 900;
+// const MIN_VISIBILITY = 0.4;
+
+// const CONNECTIONS: [number, number][] = [
+//   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
+//   [11, 23], [12, 24], [23, 24],
+//   [23, 25], [25, 27], [24, 26], [26, 28],
+// ];
+// const JOINTS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+
+// export function MoveMatch({ go }: { go: (p: "activities") => void }) {
+//   const [screen, setScreen] = useState<Screen>("intro");
+//   const [poseIndex, setPoseIndex] = useState(0);
+//   const [completed, setCompleted] = useState<boolean[]>([false, false, false]);
+//   const [cameraError, setCameraError] = useState("");
+//   const [secondsLeft, setSecondsLeft] = useState(POSES[0].timeoutSeconds);
+//   const [matched, setMatched] = useState(false);
+//   const [cameraReady, setCameraReady] = useState(false);
+
+//   const videoRef = useRef<HTMLVideoElement | null>(null);
+//   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+//   const streamRef = useRef<MediaStream | null>(null);
+//   const sessionIdRef = useRef(0);
+//   const holdStartRef = useRef<number | null>(null);
+//   const matchedRef = useRef(false);
+//   // Latest values for the per-frame callback (it must not depend on stale render closures)
+//   const screenRef = useRef<Screen>("intro");
+//   const poseIndexRef = useRef(0);
+//   const completedRef = useRef<boolean[]>([false, false, false]);
+//   const busyRef = useRef(false); // true while a matched pose is moving to the next one
+//   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+//   const currentPose = POSES[poseIndex];
+//   const totalDone = completed.filter(Boolean).length;
+
+//   // -------- camera start/stop --------
+//   const stopCamera = useCallback(() => {
+//     sessionIdRef.current += 1;
+//     if (advanceTimerRef.current) {
+//       clearTimeout(advanceTimerRef.current);
+//       advanceTimerRef.current = null;
+//     }
+//     streamRef.current?.getTracks().forEach((t) => {
+//       try { t.stop(); } catch {}
+//     });
+//     streamRef.current = null;
+//     if (videoRef.current) {
+//       try {
+//         videoRef.current.pause();
+//         videoRef.current.srcObject = null;
+//       } catch {}
+//     }
+//     setCameraReady(false);
+//     setMatched(false);
+//     holdStartRef.current = null;
+//     matchedRef.current = false;
+//     busyRef.current = false;
+//   }, []);
+
+//   const startCamera = useCallback(async () => {
+//     const session = ++sessionIdRef.current;
+//     setCameraError("");
+//     setCameraReady(false);
+
+//     try {
+//       if (!navigator.mediaDevices?.getUserMedia) {
+//         throw new Error("Camera unavailable");
+//       }
+//       const stream = await navigator.mediaDevices.getUserMedia({
+//         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+//         audio: false,
+//       });
+//       if (sessionIdRef.current !== session) {
+//         stream.getTracks().forEach((t) => t.stop());
+//         return;
+//       }
+//       streamRef.current = stream;
+//       const video = videoRef.current;
+//       if (video) {
+//         video.srcObject = stream;
+//         try {
+//           await video.play();
+//         } catch (err) {
+//           if ((err as DOMException)?.name !== "AbortError") console.warn("Video play warning:", err);
+//         }
+//         if (sessionIdRef.current === session) setCameraReady(true);
+//       }
+//       // If the <video> isn't mounted yet, handleVideoRef attaches the stream when it is.
+//     } catch (err) {
+//       if (sessionIdRef.current !== session) return;
+//       const denied = err instanceof DOMException && err.name === "NotAllowedError";
+//       setCameraError(
+//         denied
+//           ? "Camera permission was denied. Please allow it and try again."
+//           : "Couldn't open your camera. Check that no other app is using it."
+//       );
+//     }
+//   }, []);
+
+//   const handleVideoRef = useCallback((node: HTMLVideoElement | null) => {
+//     videoRef.current = node;
+//     const stream = streamRef.current;
+//     if (node && stream && node.srcObject !== stream) {
+//       node.srcObject = stream;
+//       node.play().catch(() => {});
+//       setCameraReady(true);
+//     }
+//   }, []);
+
+//   // -------- progress --------
+//   const goToNextPose = useCallback(() => {
+//     holdStartRef.current = null;
+//     matchedRef.current = false;
+//     busyRef.current = false;
+//     setMatched(false);
+//     const i = poseIndexRef.current;
+//     if (i < POSES.length - 1) {
+//       poseIndexRef.current = i + 1;
+//       setPoseIndex(i + 1);
+//       setSecondsLeft(POSES[i + 1].timeoutSeconds);
+//     } else {
+//       stopCamera();
+//       screenRef.current = "results";
+//       setScreen("results");
+//     }
+//   }, [stopCamera]);
+
+//   const completePose = useCallback(() => {
+//     if (busyRef.current) return;
+//     busyRef.current = true;
+//     holdStartRef.current = null;
+//     const next = [...completedRef.current];
+//     next[poseIndexRef.current] = true;
+//     completedRef.current = next;
+//     setCompleted(next);
+//     advanceTimerRef.current = setTimeout(() => {
+//       advanceTimerRef.current = null;
+//       goToNextPose();
+//     }, NEXT_POSE_DELAY_MS);
+//   }, [goToNextPose]);
+
+//   const skipPose = useCallback(() => {
+//     if (busyRef.current) return; // a pose was just matched; let it finish
+//     goToNextPose();
+//   }, [goToNextPose]);
+
+//   // -------- skeleton drawing (refs only, no React state per frame) --------
+//   const drawSkeleton = useCallback(
+//     (landmarks: NormalizedLandmark[] | undefined, dims: { width: number; height: number }) => {
+//       const canvas = canvasRef.current;
+//       const ctx = canvas?.getContext("2d");
+//       if (!canvas || !ctx) return;
+//       if (canvas.width !== dims.width) canvas.width = dims.width;
+//       if (canvas.height !== dims.height) canvas.height = dims.height;
+//       ctx.clearRect(0, 0, canvas.width, canvas.height);
+//       if (!landmarks) return;
+
+//       const ok = (p?: NormalizedLandmark) => !!p && (p.visibility ?? 1) >= MIN_VISIBILITY;
+//       ctx.strokeStyle = matchedRef.current ? "#4cb87c" : "#75C9F5";
+//       ctx.lineWidth = 4;
+//       ctx.lineCap = "round";
+//       for (const [a, b] of CONNECTIONS) {
+//         const p1 = landmarks[a], p2 = landmarks[b];
+//         if (!ok(p1) || !ok(p2)) continue;
+//         ctx.beginPath();
+//         ctx.moveTo(p1.x * dims.width, p1.y * dims.height);
+//         ctx.lineTo(p2.x * dims.width, p2.y * dims.height);
+//         ctx.stroke();
+//       }
+//       ctx.fillStyle = matchedRef.current ? "#4cb87c" : "#FFD83D";
+//       for (const i of JOINTS) {
+//         const p = landmarks[i];
+//         if (!ok(p)) continue;
+//         ctx.beginPath();
+//         ctx.arc(p.x * dims.width, p.y * dims.height, 5, 0, Math.PI * 2);
+//         ctx.fill();
+//       }
+//     },
+//     []
+//   );
+
+//   // -------- pose detection callback (runs every video frame) --------
+//   const handlePoseDetected = useCallback(
+//     (landmarks: NormalizedLandmark[][], dims: { width: number; height: number }) => {
+//       const pose = landmarks[0];
+//       drawSkeleton(pose, dims);
+//       if (screenRef.current !== "playing" || busyRef.current) return;
+
+//       const ok = !!pose && matchesPose(POSES[poseIndexRef.current].id, pose);
+//       if (ok !== matchedRef.current) {
+//         matchedRef.current = ok;
+//         setMatched(ok);
+//       }
+//       if (!ok) {
+//         holdStartRef.current = null;
+//         return;
+//       }
+//       if (holdStartRef.current === null) holdStartRef.current = performance.now();
+//       else if (performance.now() - holdStartRef.current >= HOLD_MS) completePose();
+//     },
+//     [drawSkeleton, completePose]
+//   );
+
+//   const { isModelLoading, isModelReady, hasPoseDetected } = usePoseLandmarker(
+//     videoRef,
+//     screen === "playing" && cameraReady,
+//     handlePoseDetected,
+//     (msg) => setCameraError(msg)
+//   );
+
+//   // -------- per-pose countdown (skips automatically at 0) --------
+//   useEffect(() => {
+//     if (screen !== "playing" || !cameraReady || matched) return;
+//     const deadline = Date.now() + POSES[poseIndex].timeoutSeconds * 1000;
+//     setSecondsLeft(POSES[poseIndex].timeoutSeconds);
+//     const timer = setInterval(() => {
+//       const left = Math.ceil((deadline - Date.now()) / 1000);
+//       if (left <= 0) {
+//         clearInterval(timer);
+//         skipPose();
+//       } else {
+//         setSecondsLeft(left);
+//       }
+//     }, 250);
+//     return () => clearInterval(timer);
+//   }, [poseIndex, screen, matched, cameraReady, skipPose]);
+
+//   // -------- leaving the activity: stop camera, loop and timers --------
+//   useEffect(() => () => stopCamera(), [stopCamera]);
+
+//   const startActivity = () => {
+//     stopCamera(); // clears anything left over from a previous session
+//     completedRef.current = [false, false, false];
+//     setCompleted([false, false, false]);
+//     poseIndexRef.current = 0;
+//     setPoseIndex(0);
+//     setSecondsLeft(POSES[0].timeoutSeconds);
+//     screenRef.current = "playing";
+//     setScreen("playing");
+//     startCamera();
+//   };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
@@ -359,6 +752,8 @@ import {
   StarStretchSVG,
   SideStretchSVG,
   StandingReachSVG,
+  OpenArmsSVG,
+  SelfHugSVG,
 } from "./PoseIllustrations";
 
 type Screen = "intro" | "playing" | "results";
@@ -366,6 +761,7 @@ type Screen = "intro" | "playing" | "results";
 interface PoseDef {
   id: PoseId;
   name: string;
+  short: string;
   instruction: string;
   SVG: ComponentType<{ color?: string; className?: string }>;
   timeoutSeconds: number;
@@ -375,6 +771,7 @@ const POSES: PoseDef[] = [
   {
     id: "star",
     name: "Star Stretch",
+    short: "Feet apart, arms out.",
     instruction:
       "Stand with your feet apart and stretch both arms diagonally up and out — like a star.",
     SVG: StarStretchSVG,
@@ -383,6 +780,7 @@ const POSES: PoseDef[] = [
   {
     id: "side",
     name: "Side Stretch",
+    short: "One arm up, gentle lean.",
     instruction:
       "Raise one arm above your head and gently lean your body toward the opposite side.",
     SVG: SideStretchSVG,
@@ -391,9 +789,28 @@ const POSES: PoseDef[] = [
   {
     id: "reach",
     name: "Standing Reach",
+    short: "Both arms straight up.",
     instruction:
       "Stand upright and reach both arms straight up above your head.",
     SVG: StandingReachSVG,
+    timeoutSeconds: 20,
+  },
+  {
+    id: "open",
+    name: "Open Arms",
+    short: "Arms straight out, like a T.",
+    instruction:
+      "Stand tall and stretch both arms straight out to the sides at shoulder height.",
+    SVG: OpenArmsSVG,
+    timeoutSeconds: 20,
+  },
+  {
+    id: "hug",
+    name: "Self Hug",
+    short: "Cross your arms over your chest.",
+    instruction:
+      "Cross your arms over your chest and give yourself a gentle hug.",
+    SVG: SelfHugSVG,
     timeoutSeconds: 20,
   },
 ];
@@ -412,7 +829,7 @@ const JOINTS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
 export function MoveMatch({ go }: { go: (p: "activities") => void }) {
   const [screen, setScreen] = useState<Screen>("intro");
   const [poseIndex, setPoseIndex] = useState(0);
-  const [completed, setCompleted] = useState<boolean[]>([false, false, false]);
+  const [completed, setCompleted] = useState<boolean[]>(POSES.map(() => false));
   const [cameraError, setCameraError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(POSES[0].timeoutSeconds);
   const [matched, setMatched] = useState(false);
@@ -427,7 +844,7 @@ export function MoveMatch({ go }: { go: (p: "activities") => void }) {
   // Latest values for the per-frame callback (it must not depend on stale render closures)
   const screenRef = useRef<Screen>("intro");
   const poseIndexRef = useRef(0);
-  const completedRef = useRef<boolean[]>([false, false, false]);
+  const completedRef = useRef<boolean[]>(POSES.map(() => false));
   const busyRef = useRef(false); // true while a matched pose is moving to the next one
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -631,8 +1048,8 @@ export function MoveMatch({ go }: { go: (p: "activities") => void }) {
 
   const startActivity = () => {
     stopCamera(); // clears anything left over from a previous session
-    completedRef.current = [false, false, false];
-    setCompleted([false, false, false]);
+    completedRef.current = POSES.map(() => false);
+    setCompleted(POSES.map(() => false));
     poseIndexRef.current = 0;
     setPoseIndex(0);
     setSecondsLeft(POSES[0].timeoutSeconds);
@@ -640,27 +1057,6 @@ export function MoveMatch({ go }: { go: (p: "activities") => void }) {
     setScreen("playing");
     startCamera();
   };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -760,7 +1156,7 @@ export function MoveMatch({ go }: { go: (p: "activities") => void }) {
             <h1 className="text-3xl md:text-4xl font-extrabold text-[#20213F] font-fredoka">
               {totalDone === 3
                 ? "You matched all three!"
-                : `${totalDone} of 3 poses matched`}
+                : `${totalDone} of 5 poses matched`}
             </h1>
             <p className="text-base text-[#20213F]/75 max-w-lg mx-auto">
               Every bit of movement counts. Nice work.

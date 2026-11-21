@@ -128,3 +128,43 @@ export function StandingReachSVG({
     </svg>
   );
 }
+
+
+
+// ADD these two components at the bottom of PoseIllustrations.tsx (same SVGProps type, same style).
+
+/** Open Arms: both arms straight out to the sides, like a T. */
+export function OpenArmsSVG({ color = "#20213F", className = "" }: SVGProps) {
+  return (
+    <svg viewBox="0 0 200 200" className={className} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" aria-label="Open Arms pose">
+      <circle cx="100" cy="45" r="17" />
+      <line x1="100" y1="62" x2="100" y2="125" />
+      <line x1="100" y1="82" x2="30" y2="82" />
+      <line x1="100" y1="82" x2="170" y2="82" />
+      <line x1="100" y1="125" x2="88" y2="186" />
+      <line x1="100" y1="125" x2="112" y2="186" />
+      <circle cx="30" cy="82" r="4" fill={color} />
+      <circle cx="170" cy="82" r="4" fill={color} />
+      <circle cx="88" cy="186" r="4" fill={color} />
+      <circle cx="112" cy="186" r="4" fill={color} />
+    </svg>
+  );
+}
+
+/** Self Hug: arms crossed over the chest. */
+export function SelfHugSVG({ color = "#20213F", className = "" }: SVGProps) {
+  return (
+    <svg viewBox="0 0 200 200" className={className} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" aria-label="Self Hug pose">
+      <circle cx="100" cy="45" r="17" />
+      <line x1="100" y1="62" x2="100" y2="125" />
+      <polyline points="100,80 66,106 118,90" />
+      <polyline points="100,80 134,106 82,90" />
+      <line x1="100" y1="125" x2="88" y2="186" />
+      <line x1="100" y1="125" x2="112" y2="186" />
+      <circle cx="118" cy="90" r="4" fill={color} />
+      <circle cx="82" cy="90" r="4" fill={color} />
+      <circle cx="88" cy="186" r="4" fill={color} />
+      <circle cx="112" cy="186" r="4" fill={color} />
+    </svg>
+  );
+}
