@@ -7,6 +7,8 @@ import { CloudCatcher } from "@/components/CloudCatcher/CloudCatcher";
 import { MemeStudio } from "@/components/MemeStudio/MemeStudio";
 import { BubbleBurst } from "@/components/BubbleBurst/BubbleBurst";
 import { MoveMatch } from "@/components/MoveMatch/MoveMatch";
+import { AirPainter } from "@/components/AirPainter/AirPainter";
+
 import {
   type HybridMoodResult,
   FRONTEND_MOOD_TO_THEME,
@@ -1093,12 +1095,30 @@ export default function App() {
     await saveMoodEntry(themeKey, note);
   }
 
+  // function handleStartActivity(id: string, title: string) {
+  //   if (id === "cloud-catcher" || id === "meme" || id === "bubble-burst" || id === "move-match") {
+  //     setActiveActivity(id);
+  //     go("activity");
+  //   } else {
+  //     setToast(`${title} is coming soon! `);
+  //     setTimeout(() => setToast(""), 3500);
+  //   }
+  // }
+
+
+
   function handleStartActivity(id: string, title: string) {
-    if (id === "cloud-catcher" || id === "meme" || id === "bubble-burst" || id === "move-match") {
+    if (
+      id === "cloud-catcher" ||
+      id === "meme" ||
+      id === "bubble-burst" ||
+      id === "move-match" ||
+      id === "air-painter"
+    ) {
       setActiveActivity(id);
       go("activity");
     } else {
-      setToast(`${title} is coming soon! Try Cloud Catcher, Meme Recreation, Bubble Burst or Move & Match.`);
+      setToast(`${title} is coming soon! Try Cloud Catcher, Meme Recreation, Bubble Burst, Move & Match or Air Painter.`);
       setTimeout(() => setToast(""), 3500);
     }
   }
@@ -1115,6 +1135,7 @@ export default function App() {
       case "bubble-burst": return <BubbleBurst go={go} />;
       case "move-match": return <MoveMatch go={go} />;
       case "doodle": return <DoodleActivity go={go} />;
+      case "air-painter": return <AirPainter go={go} />;
       case "box-breathing":
       default: return <BreathingActivity go={go} />;
     }
