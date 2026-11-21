@@ -29,3 +29,25 @@ if (!existsSync(handModel)) {
     console.warn("Could not download the hand model. Put hand_landmarker.task in public/models/ by hand.");
   }
 }
+
+
+// ============================================================
+// Pose Landmarker model (for Move & Match activity)
+// ============================================================
+const poseModel = "public/models/pose_landmarker.task";
+if (!existsSync(poseModel)) {
+  try {
+    const res = await fetch(
+      "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+    );
+    if (!res.ok) throw new Error(String(res.status));
+    writeFileSync(poseModel, Buffer.from(await res.arrayBuffer()));
+    console.log("Downloaded pose_landmarker.task");
+  } catch (err) {
+    console.warn(
+      "Could not download pose_landmarker.task.",
+      err,
+      "\nPut pose_landmarker.task in public/models/ by hand."
+    );
+  }
+}
