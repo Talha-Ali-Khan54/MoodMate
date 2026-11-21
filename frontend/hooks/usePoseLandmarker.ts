@@ -7,6 +7,15 @@ import {
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
 
+// MediaPipe logs this harmless INFO line via console.error, which triggers Next's dev overlay.
+if (typeof window !== "undefined") {
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && args[0].includes("XNNPACK delegate")) return;
+    originalError(...args);
+  };
+}
+
 let landmarkerPromise: Promise<PoseLandmarker> | null = null;
 
 export function getPoseLandmarker(): Promise<PoseLandmarker> {
