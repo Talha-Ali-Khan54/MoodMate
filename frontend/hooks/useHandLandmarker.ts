@@ -12,6 +12,8 @@ export interface FingertipData {
   y: number; // Normalized [0, 1]
   z: number;
   handIndex: number;
+  landmarkIndex?: number;
+  isTip?: boolean;
 }
 
 let landmarkerPromise: Promise<HandLandmarker> | null = null;
@@ -30,8 +32,9 @@ export function getHandLandmarker(): Promise<HandLandmarker> {
           },
           runningMode: "VIDEO",
           numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
+          minHandDetectionConfidence: 0.3,
+          minHandPresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3,
         });
       } catch (localErr) {
         console.warn("Local hand landmarker model failed to load, trying fallback CDN...", localErr);
@@ -42,8 +45,9 @@ export function getHandLandmarker(): Promise<HandLandmarker> {
           },
           runningMode: "VIDEO",
           numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
+          minHandDetectionConfidence: 0.3,
+          minHandPresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3,
         });
       }
     })().catch((err) => {
@@ -53,6 +57,10 @@ export function getHandLandmarker(): Promise<HandLandmarker> {
   }
   return landmarkerPromise;
 }
+
+// Active hand landmarks to track for natural waving/swiping:
+// 8: Index tip, 12: Middle tip, 4: Thumb tip, 16: Ring tip, 20: Pinky tip, 9: Middle knuckle (palm center), 0: Wrist
+const TRACKED_LANDMARK_INDICES = [8, 12, 4, 16, 20, 9, 0];
 
 export function useHandLandmarker(
   videoRef: RefObject<HTMLVideoElement | null>,
@@ -81,7 +89,8 @@ export function useHandLandmarker(
 
     let isStopped = false;
     let animationFrameId = 0;
-    let lastVideoTime = -1;
+    let lastTimestamp = 0;
+    let lastProcessTime = 0;
     let lastPresenceState = false;
 
     setIsModelLoading(true);
@@ -92,57 +101,59 @@ export function useHandLandmarker(
         setIsModelLoading(false);
         setIsModelReady(true);
 
-        const detectFrame = () => {
+        const detectFrame = (currentRafTime: number) => {
           if (isStopped) return;
 
           const video = videoRef.current;
           if (
             video &&
             video.readyState >= 2 &&
-            !video.paused &&
             video.videoWidth > 0 &&
             video.videoHeight > 0
           ) {
-            const currentTime = video.currentTime;
-            // Only process when video frame has advanced
-            if (currentTime !== lastVideoTime) {
-              lastVideoTime = currentTime;
+            // Process at ~40fps for optimal responsiveness without frame drops
+            if (currentRafTime - lastProcessTime >= 24) {
+              lastProcessTime = currentRafTime;
 
               try {
-                // Ensure strictly monotonic timestamp for MediaPipe
-                const frameTimestamp = performance.now();
-                const result = landmarker.detectForVideo(video, frameTimestamp);
+                // Ensure strictly monotonic timestamp for MediaPipe Tasks
+                const frameTimestamp = Math.max(performance.now(), lastTimestamp + 1);
+                lastTimestamp = frameTimestamp;
 
+                const result = landmarker.detectForVideo(video, frameTimestamp);
                 const detectedHands = result.landmarks || [];
-                const fingertips: FingertipData[] = [];
+                const points: FingertipData[] = [];
 
                 for (let i = 0; i < detectedHands.length; i++) {
                   const hand = detectedHands[i];
-                  // Index fingertip is landmark 8
-                  const tip = hand[8];
-                  if (tip) {
-                    fingertips.push({
-                      x: tip.x,
-                      y: tip.y,
-                      z: tip.z,
-                      handIndex: i,
-                    });
+                  for (const lmIdx of TRACKED_LANDMARK_INDICES) {
+                    const lm = hand[lmIdx];
+                    if (lm) {
+                      points.push({
+                        x: lm.x,
+                        y: lm.y,
+                        z: lm.z,
+                        handIndex: i,
+                        landmarkIndex: lmIdx,
+                        isTip: lmIdx === 8 || lmIdx === 12,
+                      });
+                    }
                   }
                 }
 
-                const hasHands = fingertips.length > 0;
+                const hasHands = points.length > 0;
                 if (hasHands !== lastPresenceState) {
                   lastPresenceState = hasHands;
                   setHasHandDetected(hasHands);
                 }
 
                 onHandsRef.current(
-                  fingertips,
+                  points,
                   detectedHands,
                   { width: video.videoWidth, height: video.videoHeight }
                 );
               } catch (err) {
-                // Ignore transient frame detection glitches
+                // Transient frame glitches
               }
             }
           }
