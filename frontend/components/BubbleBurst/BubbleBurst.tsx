@@ -120,6 +120,12 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           await videoRef.current.play();
           setCameraReady(true);
           setCameraState("ready");
+          if (videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0) {
+            setVideoDimensions({
+              width: videoRef.current.videoWidth,
+              height: videoRef.current.videoHeight,
+            });
+          }
         } catch (playErr: any) {
           if (playErr?.name !== "AbortError") {
             console.warn("Video playback error:", playErr);
@@ -146,19 +152,30 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   // Callback ref for video element to immediately bind stream
   const handleVideoRef = useCallback((node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node && streamRef.current && node.srcObject !== streamRef.current) {
-      node.srcObject = streamRef.current;
-      node
-        .play()
-        .then(() => {
-          setCameraReady(true);
-          setCameraState("ready");
-        })
-        .catch((err) => {
-          if (err?.name !== "AbortError") {
-            console.warn("Video mount playback error:", err);
-          }
-        });
+    if (node) {
+      node.onloadedmetadata = () => {
+        if (node.videoWidth > 0 && node.videoHeight > 0) {
+          setVideoDimensions({ width: node.videoWidth, height: node.videoHeight });
+        }
+      };
+
+      if (streamRef.current && node.srcObject !== streamRef.current) {
+        node.srcObject = streamRef.current;
+        node
+          .play()
+          .then(() => {
+            setCameraReady(true);
+            setCameraState("ready");
+            if (node.videoWidth > 0 && node.videoHeight > 0) {
+              setVideoDimensions({ width: node.videoWidth, height: node.videoHeight });
+            }
+          })
+          .catch((err) => {
+            if (err?.name !== "AbortError") {
+              console.warn("Video mount playback error:", err);
+            }
+          });
+      }
     }
   }, []);
 
@@ -293,18 +310,20 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   /* ========================================================================= */
   if (screen === "intro") {
     return (
-      <div className="page activity-page max-w-5xl mx-auto px-4 py-8">
+      <div className="page activity-page max-w-5xl mx-auto px-4 py-6">
         {/* Navigation Bar */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5">
           <button
             onClick={() => go("activities")}
-            className="flex items-center gap-2 py-2 px-4 rounded-xl bg-white border-2 border-[#20213F] font-bold text-sm text-[#20213F] shadow-[3px_3px_0px_#20213F] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0px_#20213F] transition-all"
+            style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F", boxShadow: "3px 3px 0px #20213F" }}
+            className="flex items-center gap-2 py-2 px-4 rounded-xl font-bold text-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all cursor-pointer"
           >
             ← Back to Activities
           </button>
           <button
             onClick={toggleMute}
-            className="p-2.5 rounded-xl bg-white border-2 border-[#20213F] text-[#20213F] shadow-[3px_3px_0px_#20213F] text-sm font-bold flex items-center gap-1.5"
+            style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F", boxShadow: "3px 3px 0px #20213F" }}
+            className="p-2.5 rounded-xl text-sm font-bold flex items-center gap-1.5 cursor-pointer"
             title={isMuted ? "Unmute sounds" : "Mute sounds"}
           >
             {isMuted ? "🔇 Muted" : "🔊 Sound On"}
@@ -312,11 +331,11 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
         </div>
 
         {/* Hero Card */}
-        <div className="bg-[#FFFDF8] rounded-3xl border-2 border-[#20213F] p-6 md:p-10 shadow-[8px_9px_0px_#20213F] mb-8 relative overflow-hidden">
+        <div className="bg-[#FFFDF8] rounded-3xl border-2 border-[#20213F] p-6 md:p-8 shadow-[8px_9px_0px_#20213F] mb-6 relative overflow-hidden">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
             {/* Left Content */}
             <div className="md:col-span-7 space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFE0D9] border border-[#FF765E] text-[#FF765E] font-bold text-xs uppercase tracking-wider">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FFE0D9] border border-[#FF765E] text-[#FF765E] font-extrabold text-xs uppercase tracking-wider">
                 <span>🔥</span>
                 <span>Stress & Frustration Release</span>
               </div>
@@ -325,76 +344,83 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
                 Bubble Burst
               </h1>
 
-              <p className="text-lg md:text-xl text-[#20213F]/80 font-medium leading-relaxed">
-                Take a moment, move your hands, and burst away the bubbles!
+              <p className="text-lg md:text-xl text-[#20213F]/85 font-medium leading-relaxed">
+                Take a moment, wave your hands, and burst away the bubbles!
               </p>
 
-              <p className="text-sm text-[#20213F]/70 leading-relaxed">
-                Feeling angry, tense, or overwhelmed? Release that physical frustration through a quick, satisfying hand-tracking mini-game. Point with your index fingers and pop every bubble that crosses your screen!
+              <p className="text-sm text-[#20213F]/75 leading-relaxed">
+                Feeling tense or frustrated? Point, swipe, and pop floating bubbles directly with your hands through your webcam. Fast gestures pop bubbles instantly!
               </p>
 
               {/* Instructions Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/15 space-y-1">
+                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
                     <span>🖐</span> Wave Both Hands
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    Use your index fingertips. MediaPipe tracks both hands simultaneously.
+                    MediaPipe tracks your fingertips and palms with continuous swipe detection.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/15 space-y-1">
+                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
                     <span>🫧</span> Pop for Points
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    Small bubbles yield 30 pts, medium 20 pts, large 10 pts, & golden sparks 50 pts!
+                    Small bubbles: 30 pts, Medium: 20 pts, Large: 10 pts, Golden Sparks: 50 pts!
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/15 space-y-1">
+                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
                     <span>⏱</span> 30-Second Rush
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    A quick burst to refocus energy and clear mental static.
+                    A quick burst to refocus energy and release physical tension.
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/15 space-y-1">
+                <div className="p-3.5 rounded-2xl bg-[#FFF9ED] border border-[#20213F]/20 space-y-1">
                   <div className="font-bold text-sm text-[#20213F] flex items-center gap-1.5">
                     <span>🛡</span> 100% On-Device
                   </div>
                   <p className="text-xs text-[#20213F]/70">
-                    Your camera feed never leaves your browser. Zero video is saved.
+                    Your camera feed stays completely in your browser. No video is ever saved.
                   </p>
                 </div>
               </div>
 
-              {/* Camera Note & CTA */}
+              {/* Camera Note & HIGH-VISIBILITY Start CTA */}
               <div className="pt-4 space-y-3">
-                <div className="flex items-center gap-2 text-xs text-[#20213F]/60">
+                <div className="flex items-center gap-2 text-xs text-[#20213F]/70">
                   <span>📷</span>
-                  <span>Camera access is requested only after you click Start Game.</span>
+                  <span>Camera activates only when you click Start Game below.</span>
                 </div>
 
+                {/* Primary Start Button: Explicit high-contrast vivid Coral styling */}
                 <button
+                  type="button"
                   onClick={startGame}
-                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#FF765E] text-white font-extrabold text-lg font-fredoka border-2 border-[#20213F] shadow-[5px_5px_0px_#20213F] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_#20213F] transition-all flex items-center justify-center gap-3 cursor-pointer"
+                  style={{
+                    backgroundColor: "#FF765E",
+                    color: "#FFFFFF",
+                    border: "3px solid #20213F",
+                    boxShadow: "5px 6px 0px #20213F",
+                  }}
+                  className="w-full sm:w-auto px-10 py-4 rounded-2xl font-extrabold text-xl font-fredoka hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_#20213F] transition-all flex items-center justify-center gap-3 cursor-pointer"
                 >
-                  <span>Start Game</span>
-                  <span className="text-xl">➔</span>
+                  <span style={{ color: "#FFFFFF" }}>Start Game</span>
+                  <span className="text-2xl" style={{ color: "#FFFFFF" }}>➔</span>
                 </button>
               </div>
             </div>
 
             {/* Right Mascot Artwork */}
             <div className="md:col-span-5 flex flex-col items-center justify-center text-center p-6 bg-[#FFE0D9]/50 rounded-2xl border-2 border-[#20213F]">
-              <div className="relative w-48 h-48 flex items-center justify-center">
-                {/* Visual Animated Spark Mascot */}
+              <div className="relative w-44 h-44 flex items-center justify-center">
                 <svg
-                  className="w-44 h-44 animate-bounce"
+                  className="w-40 h-40 animate-bounce"
                   style={{ animationDuration: "2.5s" }}
                   viewBox="0 0 160 160"
                   role="img"
@@ -418,11 +444,11 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
                 </svg>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-3">
                 <span className="font-fredoka text-lg font-bold text-[#20213F] block">
                   Feeling heated?
                 </span>
-                <span className="text-xs text-[#20213F]/70">
+                <span className="text-xs text-[#20213F]/75">
                   Channel that high-intensity energy into popped bubbles!
                 </span>
               </div>
@@ -434,21 +460,25 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   }
 
   /* ========================================================================= */
-  /* SCREEN 2: ACTIVE GAME                                                     */
+  /* SCREEN 2: ACTIVE GAME (Fitted to Browser Size - No Overflow Scrolling)    */
   /* ========================================================================= */
   if (screen === "playing") {
     const progressPercent = (timeRemaining / 30) * 100;
 
     return (
-      <div className="page activity-page max-w-5xl mx-auto px-4 py-4 space-y-4">
+      <div
+        className="page activity-page max-w-6xl mx-auto px-3 py-1 flex flex-col overflow-hidden"
+        style={{ height: "calc(100vh - 80px)", maxHeight: "calc(100dvh - 80px)" }}
+      >
         {/* Top Game HUD Bar */}
-        <div className="bg-[#FFFDF8] rounded-2xl border-2 border-[#20213F] p-4 shadow-[5px_5px_0px_#20213F] flex flex-wrap items-center justify-between gap-4">
+        <div className="shrink-0 bg-[#FFFDF8] rounded-2xl border-2 border-[#20213F] px-4 py-2.5 shadow-[4px_4px_0px_#20213F] flex flex-wrap items-center justify-between gap-3 mb-2">
           {/* Left: Pause, Restart, Mute */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsPaused((p) => !p)}
               disabled={!cameraReady}
-              className="py-2 px-3.5 rounded-xl bg-white border-2 border-[#20213F] text-[#20213F] font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] disabled:opacity-50 cursor-pointer"
+              style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+              className="py-1.5 px-3 rounded-xl font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] disabled:opacity-50 cursor-pointer"
             >
               {isPaused ? "▶ Resume" : "⏸ Pause"}
             </button>
@@ -456,7 +486,8 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             <button
               onClick={restartGame}
               disabled={!cameraReady}
-              className="py-2 px-3 rounded-xl bg-white border-2 border-[#20213F] text-[#20213F] font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] disabled:opacity-50 cursor-pointer"
+              style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+              className="py-1.5 px-3 rounded-xl font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] disabled:opacity-50 cursor-pointer"
               title="Restart session"
             >
               🔄 Reset
@@ -464,7 +495,8 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
 
             <button
               onClick={toggleMute}
-              className="p-2 rounded-xl bg-white border-2 border-[#20213F] text-[#20213F] font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] cursor-pointer"
+              style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+              className="p-1.5 px-2.5 rounded-xl font-bold text-xs shadow-[2px_2px_0px_#20213F] hover:bg-[#FFF9ED] cursor-pointer"
               title={isMuted ? "Unmute sounds" : "Mute sounds"}
             >
               {isMuted ? "🔇" : "🔊"}
@@ -475,13 +507,13 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#FFE0D9] border border-[#FF765E]">
               <span className="text-sm">⏱</span>
-              <span className="font-fredoka text-xl font-bold text-[#FF765E] w-8 text-center">
+              <span className="font-fredoka text-lg font-bold text-[#FF765E] w-8 text-center">
                 {timeRemaining}s
               </span>
             </div>
 
             {/* Circular/Linear Progress Bar */}
-            <div className="w-24 md:w-36 h-3 bg-[#E8E2D5] rounded-full overflow-hidden border border-[#20213F]/20">
+            <div className="w-20 md:w-32 h-2.5 bg-[#E8E2D5] rounded-full overflow-hidden border border-[#20213F]/20">
               <div
                 className="h-full bg-[#FF765E] transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
@@ -489,18 +521,18 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
             </div>
           </div>
 
-          {/* Right: Score & Popped Count */}
-          <div className="flex items-center gap-3">
+          {/* Right: Score, Popped Count, Exit */}
+          <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-1 px-3 py-1 rounded-xl bg-[#FFD83D]/30 border border-[#FFD83D]">
               <span className="text-xs font-bold text-[#20213F]/70">SCORE</span>
-              <span className="font-fredoka text-xl font-bold text-[#20213F]">
+              <span className="font-fredoka text-lg font-bold text-[#20213F]">
                 {score}
               </span>
             </div>
 
             <div className="flex items-center gap-1 px-3 py-1 rounded-xl bg-[#A8E6C3]/40 border border-[#A8E6C3]">
               <span className="text-xs font-bold text-[#20213F]/70">POPPED</span>
-              <span className="font-fredoka text-xl font-bold text-[#20213F]">
+              <span className="font-fredoka text-lg font-bold text-[#20213F]">
                 {poppedCount}
               </span>
             </div>
@@ -510,7 +542,8 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
                 stopCamera();
                 go("activities");
               }}
-              className="py-1.5 px-3 rounded-xl bg-white border border-[#20213F]/30 text-[#20213F] text-xs font-bold hover:bg-red-50 hover:border-red-400 hover:text-red-600"
+              style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "1.5px solid rgba(32,33,63,0.3)" }}
+              className="py-1.5 px-3 rounded-xl text-xs font-bold hover:bg-red-50 hover:border-red-400 hover:text-red-600 cursor-pointer"
               title="Quit game"
             >
               Exit
@@ -518,8 +551,8 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
           </div>
         </div>
 
-        {/* Main Game Screen Canvas Container */}
-        <div className="relative w-full aspect-4/3 md:aspect-16/10 rounded-3xl border-3 border-[#20213F] overflow-hidden bg-black shadow-[8px_9px_0px_#20213F]">
+        {/* Main Game Screen Canvas Container: Fills 100% of remaining viewport */}
+        <div className="relative flex-1 min-h-0 w-full rounded-2xl border-3 border-[#20213F] overflow-hidden bg-black shadow-[6px_7px_0px_#20213F]">
           {/* Mirrored Camera Video Feed */}
           <video
             ref={handleVideoRef}
@@ -545,15 +578,15 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
 
           {/* Friendly Hand Instruction Banner when hand is not detected */}
           {cameraReady && !hasHandDetected && !isPaused && (
-            <div className="absolute top-5 inset-x-0 mx-auto w-fit z-20 px-5 py-2.5 rounded-full bg-[#20213F]/85 backdrop-blur-md text-white font-fredoka text-sm md:text-base border border-white/20 shadow-lg flex items-center gap-2 animate-pulse">
+            <div className="absolute top-4 inset-x-0 mx-auto w-fit z-20 px-5 py-2 rounded-full bg-[#20213F]/85 backdrop-blur-md text-white font-fredoka text-sm md:text-base border border-white/20 shadow-lg flex items-center gap-2 animate-pulse">
               <span>🖐</span>
-              <span>Show your hand to start popping bubbles!</span>
+              <span>Wave your hand to start bursting bubbles!</span>
             </div>
           )}
 
           {/* Encouragement Floating Toast */}
           {toast && (
-            <div className="absolute top-18 inset-x-0 mx-auto w-fit z-20 px-6 py-2 rounded-2xl bg-white/95 text-[#20213F] border-2 border-[#20213F] shadow-[4px_4px_0px_#20213F] font-fredoka text-lg md:text-xl font-bold flex items-center gap-2 animate-bounce">
+            <div className="absolute top-16 inset-x-0 mx-auto w-fit z-20 px-5 py-1.5 rounded-2xl bg-white/95 text-[#20213F] border-2 border-[#20213F] shadow-[3px_3px_0px_#20213F] font-fredoka text-base md:text-lg font-bold flex items-center gap-2 animate-bounce">
               <span>{toast.emoji}</span>
               <span style={{ color: toast.color }}>{toast.text}</span>
             </div>
@@ -595,13 +628,15 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
               <div className="flex gap-3">
                 <button
                   onClick={startCamera}
-                  className="px-5 py-2.5 rounded-xl bg-[#FF765E] text-white font-bold text-sm border-2 border-[#20213F] shadow-[3px_3px_0px_#20213F] cursor-pointer"
+                  style={{ backgroundColor: "#FF765E", color: "#FFFFFF", border: "2px solid #20213F" }}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm shadow-[3px_3px_0px_#20213F] cursor-pointer"
                 >
                   Try Again
                 </button>
                 <button
                   onClick={() => setScreen("intro")}
-                  className="px-5 py-2.5 rounded-xl bg-white text-[#20213F] font-bold text-sm border-2 border-[#20213F] cursor-pointer"
+                  style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
                 >
                   Back to Intro
                 </button>
@@ -618,13 +653,15 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
               <div className="flex gap-3">
                 <button
                   onClick={() => setIsPaused(false)}
-                  className="px-6 py-3 rounded-2xl bg-[#FF765E] text-white font-bold font-fredoka text-base border-2 border-white shadow-lg cursor-pointer"
+                  style={{ backgroundColor: "#FF765E", color: "#FFFFFF", border: "2px solid #FFFFFF" }}
+                  className="px-6 py-2.5 rounded-2xl font-bold font-fredoka text-base shadow-lg cursor-pointer"
                 >
                   Resume
                 </button>
                 <button
                   onClick={restartGame}
-                  className="px-5 py-3 rounded-2xl bg-white text-[#20213F] font-bold text-sm border-2 border-[#20213F] cursor-pointer"
+                  style={{ backgroundColor: "#FFFFFF", color: "#20213F", border: "2px solid #20213F" }}
+                  className="px-5 py-2.5 rounded-2xl font-bold text-sm cursor-pointer"
                 >
                   Restart
                 </button>
@@ -641,11 +678,11 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
   /* ========================================================================= */
   return (
     <div className="page activity-page max-w-3xl mx-auto px-4 py-8">
-      <div className="bg-[#FFFDF8] rounded-3xl border-2 border-[#20213F] p-6 md:p-10 shadow-[8px_9px_0px_#20213F] space-y-8 text-center">
+      <div className="bg-[#FFFDF8] rounded-3xl border-2 border-[#20213F] p-6 md:p-8 shadow-[8px_9px_0px_#20213F] space-y-7 text-center">
         {/* Header Mascot */}
         <div className="flex justify-center">
-          <div className="w-32 h-32 rounded-full bg-[#FFE0D9] border-2 border-[#20213F] flex items-center justify-center shadow-[4px_4px_0px_#20213F]">
-            <span className="text-6xl animate-pulse">✨</span>
+          <div className="w-28 h-28 rounded-full bg-[#FFE0D9] border-2 border-[#20213F] flex items-center justify-center shadow-[4px_4px_0px_#20213F]">
+            <span className="text-5xl animate-pulse">✨</span>
           </div>
         </div>
 
@@ -710,14 +747,26 @@ export function BubbleBurst({ go, onFinish }: BubbleBurstProps) {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
           <button
             onClick={startGame}
-            className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-[#FF765E] text-white font-extrabold text-base font-fredoka border-2 border-[#20213F] shadow-[4px_4px_0px_#20213F] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_#20213F] transition-all cursor-pointer"
+            style={{
+              backgroundColor: "#FF765E",
+              color: "#FFFFFF",
+              border: "2.5px solid #20213F",
+              boxShadow: "4px 4px 0px #20213F",
+            }}
+            className="w-full sm:w-auto px-8 py-3.5 rounded-2xl font-extrabold text-base font-fredoka hover:translate-x-0.5 hover:translate-y-0.5 transition-all cursor-pointer"
           >
             🔄 Play Again
           </button>
 
           <button
             onClick={() => go("activities")}
-            className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-white text-[#20213F] font-bold text-base border-2 border-[#20213F] shadow-[4px_4px_0px_#20213F] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0px_#20213F] transition-all cursor-pointer"
+            style={{
+              backgroundColor: "#FFFFFF",
+              color: "#20213F",
+              border: "2px solid #20213F",
+              boxShadow: "4px 4px 0px #20213F",
+            }}
+            className="w-full sm:w-auto px-8 py-3.5 rounded-2xl font-bold text-base hover:translate-x-0.5 hover:translate-y-0.5 transition-all cursor-pointer"
           >
             ← Back to Activities
           </button>

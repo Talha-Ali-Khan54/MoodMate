@@ -20,13 +20,32 @@ interface BubbleBurstCanvasProps {
 }
 
 const BUBBLE_COLORS = [
-  { main: "#FF765E", glow: "rgba(255, 118, 94, 0.4)" }, // Coral / Spark
-  { main: "#75C9F5", glow: "rgba(117, 201, 245, 0.4)" }, // Blue
-  { main: "#FFD83D", glow: "rgba(255, 216, 61, 0.4)" }, // Yellow
-  { main: "#B991E8", glow: "rgba(185, 145, 232, 0.4)" }, // Lavender
-  { main: "#A8E6C3", glow: "rgba(168, 230, 195, 0.4)" }, // Mint
-  { main: "#FFB0E0", glow: "rgba(255, 176, 224, 0.4)" }, // Pink
+  { main: "#FF765E", glow: "rgba(255, 118, 94, 0.45)" }, // Coral / Spark
+  { main: "#75C9F5", glow: "rgba(117, 201, 245, 0.45)" }, // Blue
+  { main: "#FFD83D", glow: "rgba(255, 216, 61, 0.45)" }, // Yellow
+  { main: "#B991E8", glow: "rgba(185, 145, 232, 0.45)" }, // Lavender
+  { main: "#A8E6C3", glow: "rgba(168, 230, 195, 0.45)" }, // Mint
+  { main: "#FFB0E0", glow: "rgba(255, 176, 224, 0.45)" }, // Pink
 ];
+
+// Distance from point (px, py) to line segment (x1, y1)-(x2, y2)
+function distToSegment(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.hypot(px - projX, py - projY);
+}
 
 export function mapLandmarkToCanvas(
   normX: number,
@@ -88,6 +107,16 @@ export function BubbleBurstCanvas({
   isPausedRef.current = isPaused;
   onPoppedRef.current = onBubblePopped;
 
+  // Previous cursor positions for continuous swipe collision detection
+  const prevCursorsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+
+  // Mouse / Touch pointer fallback
+  const mousePointerRef = useRef<{ x: number; y: number; active: boolean }>({
+    x: -999,
+    y: -999,
+    active: false,
+  });
+
   // Game internal state stored in refs for 60fps performance
   const bubblesRef = useRef<Bubble[]>([]);
   const particlesRef = useRef<Particle[]>([]);
@@ -100,45 +129,45 @@ export function BubbleBurstCanvas({
     (canvasWidth: number, canvasHeight: number, startAtBottom = false): Bubble => {
       const id = ++nextIdRef.current;
       const roll = Math.random();
-      const isSpecial = roll < 0.12; // 12% chance for Golden Spark bubble
+      const isSpecial = roll < 0.14; // 14% chance for Golden Spark bubble
 
       let baseRadius: number;
       let points: number;
       let colorDef: { main: string; glow: string };
 
       if (isSpecial) {
-        baseRadius = 28 + Math.random() * 8;
+        baseRadius = 32 + Math.random() * 8;
         points = 50;
         colorDef = { main: "#FFE156", glow: "rgba(255, 225, 86, 0.6)" };
       } else if (roll < 0.45) {
         // Small bubble (agile, fast)
-        baseRadius = 22 + Math.random() * 6;
+        baseRadius = 24 + Math.random() * 6;
         points = 30;
         colorDef = BUBBLE_COLORS[Math.floor(Math.random() * BUBBLE_COLORS.length)];
       } else if (roll < 0.8) {
         // Medium bubble
-        baseRadius = 32 + Math.random() * 7;
+        baseRadius = 35 + Math.random() * 7;
         points = 20;
         colorDef = BUBBLE_COLORS[Math.floor(Math.random() * BUBBLE_COLORS.length)];
       } else {
         // Large bubble
-        baseRadius = 44 + Math.random() * 8;
+        baseRadius = 46 + Math.random() * 10;
         points = 10;
         colorDef = BUBBLE_COLORS[Math.floor(Math.random() * BUBBLE_COLORS.length)];
       }
 
       // Safe horizontal bounds
-      const margin = baseRadius + 40;
-      const x = margin + Math.random() * Math.max(100, canvasWidth - margin * 2);
+      const margin = baseRadius + 30;
+      const x = margin + Math.random() * Math.max(80, canvasWidth - margin * 2);
 
       // Vertical position
       const y = startAtBottom
-        ? canvasHeight + baseRadius + Math.random() * 80
-        : margin + Math.random() * (canvasHeight - margin * 2);
+        ? canvasHeight + baseRadius + Math.random() * 60
+        : margin + Math.random() * Math.max(100, canvasHeight - margin * 2);
 
       // Floating speeds
-      const speedY = -(0.7 + Math.random() * 1.2 + (isSpecial ? 0.3 : 0));
-      const speedX = (Math.random() - 0.5) * 0.8;
+      const speedY = -(0.8 + Math.random() * 1.3 + (isSpecial ? 0.3 : 0));
+      const speedX = (Math.random() - 0.5) * 0.9;
 
       return {
         id,
@@ -169,7 +198,7 @@ export function BubbleBurstCanvas({
       const h = canvas?.height || 600;
 
       const initial: Bubble[] = [];
-      const targetCount = 10;
+      const targetCount = 11;
       for (let i = 0; i < targetCount; i++) {
         initial.push(spawnBubble(w, h, false));
       }
@@ -177,11 +206,13 @@ export function BubbleBurstCanvas({
       particlesRef.current = [];
       popEffectsRef.current = [];
       trailRef.current = [];
+      prevCursorsRef.current.clear();
     } else {
       bubblesRef.current = [];
       particlesRef.current = [];
       popEffectsRef.current = [];
       trailRef.current = [];
+      prevCursorsRef.current.clear();
     }
   }, [isPlaying, spawnBubble]);
 
@@ -197,8 +228,8 @@ export function BubbleBurstCanvas({
     const updateCanvasSize = () => {
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      const targetWidth = Math.floor(rect.width * dpr);
-      const targetHeight = Math.floor(rect.height * dpr);
+      const targetWidth = Math.max(300, Math.floor(rect.width * dpr));
+      const targetHeight = Math.max(200, Math.floor(rect.height * dpr));
 
       if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
         canvas.width = targetWidth;
@@ -208,6 +239,24 @@ export function BubbleBurstCanvas({
 
     updateCanvasSize();
     window.addEventListener("resize", updateCanvasSize);
+
+    // Mouse / Touch handlers for additional interaction
+    const handlePointerMove = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      mousePointerRef.current = {
+        x: (e.clientX - rect.left) * dpr,
+        y: (e.clientY - rect.top) * dpr,
+        active: true,
+      };
+    };
+
+    const handlePointerLeave = () => {
+      mousePointerRef.current.active = false;
+    };
+
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerleave", handlePointerLeave);
 
     let lastTime = performance.now();
 
@@ -221,7 +270,7 @@ export function BubbleBurstCanvas({
       if (width === 0 || height === 0) return;
 
       const dpr = window.devicePixelRatio || 1;
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      const dt = Math.min((now - lastTime) / 1000, 0.08);
       lastTime = now;
 
       // Clear previous frame
@@ -229,12 +278,13 @@ export function BubbleBurstCanvas({
 
       const isPaused = isPausedRef.current;
 
-      // 1. Map index fingertips to canvas coordinates
+      // 1. Map hand points to canvas coordinates
       const currentTips = fingertipsRef.current;
       const videoDims = videoDimsRef.current;
-      const mappedCursors: CursorPoint[] = [];
+      const mappedCursors: Array<CursorPoint & { idKey: string; isTip: boolean }> = [];
 
-      for (const tip of currentTips) {
+      for (let i = 0; i < currentTips.length; i++) {
+        const tip = currentTips[i];
         const pt = mapLandmarkToCanvas(
           tip.x,
           tip.y,
@@ -244,14 +294,18 @@ export function BubbleBurstCanvas({
           height,
           true // horizontally mirrored to match selfie preview
         );
+
+        const lmKey = `${tip.handIndex}-${tip.landmarkIndex ?? i}`;
         mappedCursors.push({
           x: pt.x,
           y: pt.y,
           handIndex: tip.handIndex,
+          idKey: lmKey,
+          isTip: tip.isTip ?? (tip.landmarkIndex === 8 || tip.landmarkIndex === 12),
         });
 
-        // Add trail points
-        if (!isPaused) {
+        // Add trail points for fingertips
+        if (!isPaused && (tip.isTip ?? tip.landmarkIndex === 8)) {
           trailRef.current.push({
             x: pt.x,
             y: pt.y,
@@ -261,15 +315,26 @@ export function BubbleBurstCanvas({
         }
       }
 
-      // Keep trail length manageable
-      if (trailRef.current.length > 30) {
-        trailRef.current.splice(0, trailRef.current.length - 30);
+      // Add mouse cursor if active
+      if (mousePointerRef.current.active) {
+        mappedCursors.push({
+          x: mousePointerRef.current.x,
+          y: mousePointerRef.current.y,
+          handIndex: 99,
+          idKey: "mouse",
+          isTip: true,
+        });
       }
 
-      // 2. Update and check bubble collisions (if not paused)
+      // Keep trail length manageable
+      if (trailRef.current.length > 36) {
+        trailRef.current.splice(0, trailRef.current.length - 36);
+      }
+
+      // 2. Update and check bubble collisions with Continuous Swipe Detection
       const currentBubbles = bubblesRef.current;
       const remainingBubbles: Bubble[] = [];
-      const cursorRadius = 26 * dpr; // Responsive fingertip collision radius
+      const prevMap = prevCursorsRef.current;
 
       for (let i = 0; i < currentBubbles.length; i++) {
         const b = currentBubbles[i];
@@ -293,13 +358,26 @@ export function BubbleBurstCanvas({
             b.speedX = -Math.abs(b.speedX);
           }
 
-          // Check collision against all detected index fingertips
+          // Check collision against all detected hand points and fast movement paths
           for (const cur of mappedCursors) {
-            const dx = cur.x - b.x;
-            const dy = cur.y - b.y;
-            const dist = Math.hypot(dx, dy);
+            const hitRadius = (cur.isTip ? 42 : 50) * dpr; // Generous, satisfying hit area
+            const prev = prevMap.get(cur.idKey);
 
-            if (dist <= b.radius + cursorRadius) {
+            let hit = false;
+            if (prev) {
+              // Sweep line segment collision check
+              const segmentDist = distToSegment(b.x, b.y, prev.x, prev.y, cur.x, cur.y);
+              if (segmentDist <= b.radius + hitRadius) {
+                hit = true;
+              }
+            } else {
+              const pointDist = Math.hypot(cur.x - b.x, cur.y - b.y);
+              if (pointDist <= b.radius + hitRadius) {
+                hit = true;
+              }
+            }
+
+            if (hit) {
               popped = true;
 
               // Play synthesized pop
@@ -309,17 +387,17 @@ export function BubbleBurstCanvas({
               onPoppedRef.current(b.points, b.isSpecial);
 
               // Create burst particles
-              const particleCount = b.isSpecial ? 22 : 14;
+              const particleCount = b.isSpecial ? 24 : 16;
               for (let p = 0; p < particleCount; p++) {
                 const angle = (Math.PI * 2 * p) / particleCount + (Math.random() - 0.5) * 0.4;
-                const speed = (2.5 + Math.random() * 4.5) * dpr;
+                const speed = (2.5 + Math.random() * 5.0) * dpr;
                 particlesRef.current.push({
                   id: ++nextIdRef.current,
                   x: b.x,
                   y: b.y,
                   vx: Math.cos(angle) * speed,
                   vy: Math.sin(angle) * speed,
-                  radius: (2.5 + Math.random() * 3.5) * dpr,
+                  radius: (3 + Math.random() * 3.5) * dpr,
                   color: b.color,
                   alpha: 1.0,
                   life: 0,
@@ -333,7 +411,7 @@ export function BubbleBurstCanvas({
                 x: b.x,
                 y: b.y,
                 radius: b.radius,
-                maxRadius: b.radius * 2.2,
+                maxRadius: b.radius * 2.3,
                 color: b.color,
                 points: b.points,
                 text: b.isSpecial ? `+${b.points} SPARK!` : `+${b.points}`,
@@ -341,213 +419,195 @@ export function BubbleBurstCanvas({
                 createdAt: now,
               });
 
-              break; // Don't check other cursors for this already-popped bubble
+              break; // Bubble popped!
             }
           }
 
-          // If bubble reached the top edge without being popped, recycle it to the bottom
+          // If bubble reached top without popping, recycle it to bottom
           if (!popped && b.y < -b.radius - 20 * dpr) {
             remainingBubbles.push(spawnBubble(width, height, true));
-            continue;
+          } else if (!popped) {
+            remainingBubbles.push(b);
           }
-        }
-
-        if (!popped) {
+        } else {
           remainingBubbles.push(b);
         }
       }
 
-      // Maintain ideal bubble density (~10 bubbles)
-      while (remainingBubbles.length < 10) {
+      // Update previous cursor map for next frame's continuous swipe checks
+      prevMap.clear();
+      for (const cur of mappedCursors) {
+        prevMap.set(cur.idKey, { x: cur.x, y: cur.y });
+      }
+
+      // Maintain active bubble count (keep 10-12 active bubbles floating)
+      while (remainingBubbles.length < 11) {
         remainingBubbles.push(spawnBubble(width, height, true));
       }
       bubblesRef.current = remainingBubbles;
 
-      // 3. Draw bubbles
-      for (const b of remainingBubbles) {
+      // 3. Render Bubbles
+      for (let i = 0; i < remainingBubbles.length; i++) {
+        const b = remainingBubbles[i];
         ctx.save();
 
         // Outer glow
         ctx.shadowColor = b.glowColor;
-        ctx.shadowBlur = (b.isSpecial ? 20 : 12) * dpr;
+        ctx.shadowBlur = (b.isSpecial ? 22 : 14) * dpr;
 
-        // Translucent bubble body with 3D gradient
-        const grad = ctx.createRadialGradient(
-          b.x - b.radius * 0.32,
+        // Bubble main sphere gradient
+        const sphereGrad = ctx.createRadialGradient(
+          b.x - b.radius * 0.35,
           b.y - b.radius * 0.35,
           b.radius * 0.1,
           b.x,
           b.y,
           b.radius
         );
-        grad.addColorStop(0, "rgba(255, 255, 255, 0.85)");
-        grad.addColorStop(0.3, b.isSpecial ? "rgba(255, 240, 160, 0.65)" : b.glowColor);
-        grad.addColorStop(0.8, b.isSpecial ? "rgba(255, 215, 0, 0.45)" : b.glowColor);
-        grad.addColorStop(1, b.color);
+        sphereGrad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+        sphereGrad.addColorStop(0.3, b.glowColor);
+        sphereGrad.addColorStop(0.85, "rgba(255, 255, 255, 0.2)");
+        sphereGrad.addColorStop(1, b.color);
 
-        ctx.fillStyle = grad;
+        ctx.fillStyle = sphereGrad;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Rim stroke
-        ctx.lineWidth = (b.isSpecial ? 3 : 2) * dpr;
-        ctx.strokeStyle = b.isSpecial ? "#FFF8D6" : "rgba(255, 255, 255, 0.75)";
+        // Bubble outer border
+        ctx.strokeStyle = b.isSpecial ? "#FFF8CC" : "rgba(255, 255, 255, 0.85)";
+        ctx.lineWidth = (b.isSpecial ? 3.5 : 2.5) * dpr;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Specular highlight crescent (top-left)
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+        // Specular highlight crescent
+        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
         ctx.beginPath();
         ctx.ellipse(
           b.x - b.radius * 0.38,
           b.y - b.radius * 0.38,
-          b.radius * 0.28,
-          b.radius * 0.16,
+          b.radius * 0.26,
+          b.radius * 0.14,
           -Math.PI / 4,
           0,
           Math.PI * 2
         );
         ctx.fill();
 
-        // Secondary subtle reflection (bottom-right)
-        ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
-        ctx.beginPath();
-        ctx.ellipse(
-          b.x + b.radius * 0.32,
-          b.y + b.radius * 0.32,
-          b.radius * 0.18,
-          b.radius * 0.08,
-          -Math.PI / 4,
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
-
-        // Points badge inside bubble for visual clarity
-        ctx.fillStyle = "#20213F";
-        ctx.font = `bold ${Math.max(11 * dpr, Math.floor(b.radius * 0.48))}px Fredoka, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(`${b.points}`, b.x, b.y + 1 * dpr);
+        // Special golden spark indicator
+        if (b.isSpecial) {
+          ctx.fillStyle = "#20213F";
+          ctx.font = `bold ${14 * dpr}px Fredoka, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("✦", b.x, b.y);
+        }
 
         ctx.restore();
       }
 
-      // 4. Update and draw particles
-      const currentParticles = particlesRef.current;
-      const remainingParticles: Particle[] = [];
-
-      for (const p of currentParticles) {
+      // 4. Update and Render Burst Particles
+      const nextParticles: Particle[] = [];
+      for (const p of particlesRef.current) {
         if (!isPaused) {
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vy += 0.08 * dpr; // Gravity
-          p.vx *= 0.98; // Friction
+          p.x += p.vx * 60 * dt;
+          p.y += p.vy * 60 * dt;
+          p.vy += 0.12 * dpr; // slight gravity
           p.life++;
           p.alpha = Math.max(0, 1 - p.life / p.maxLife);
         }
 
-        if (p.alpha > 0.02) {
+        if (p.alpha > 0.05) {
           ctx.save();
           ctx.globalAlpha = p.alpha;
           ctx.fillStyle = p.color;
           ctx.shadowColor = p.color;
-          ctx.shadowBlur = 6 * dpr;
+          ctx.shadowBlur = 8 * dpr;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-
-          remainingParticles.push(p);
+          nextParticles.push(p);
         }
       }
-      particlesRef.current = remainingParticles;
+      particlesRef.current = nextParticles;
 
-      // 5. Update and draw pop shockwaves and floating point text
-      const currentPopEffects = popEffectsRef.current;
-      const remainingPopEffects: PopEffect[] = [];
+      // 5. Update and Render Pop Effects (Shockwaves + Text)
+      const nextPopEffects: PopEffect[] = [];
+      for (const eff of popEffectsRef.current) {
+        const age = (now - eff.createdAt) / 1000;
+        const progress = Math.min(1, age / 0.55);
 
-      for (const eff of currentPopEffects) {
-        if (!isPaused) {
-          eff.radius += (eff.maxRadius - eff.radius) * 0.15;
-          eff.alpha -= 0.035;
-          eff.y -= 1.2 * dpr; // Float upward
-        }
-
-        if (eff.alpha > 0.02) {
+        if (progress < 1) {
           ctx.save();
-          ctx.globalAlpha = Math.max(0, eff.alpha);
+          const currentRadius = eff.radius + (eff.maxRadius - eff.radius) * progress;
+          const alpha = 1 - progress;
 
-          // Shockwave ring
-          ctx.beginPath();
-          ctx.arc(eff.x, eff.y, eff.radius, 0, Math.PI * 2);
-          ctx.lineWidth = 3.5 * dpr;
+          // Expanding shockwave ring
           ctx.strokeStyle = eff.color;
-          ctx.shadowColor = eff.color;
-          ctx.shadowBlur = 10 * dpr;
+          ctx.globalAlpha = alpha * 0.8;
+          ctx.lineWidth = 3.5 * dpr * (1 - progress);
+          ctx.beginPath();
+          ctx.arc(eff.x, eff.y, currentRadius, 0, Math.PI * 2);
           ctx.stroke();
 
           // Floating score text
           if (eff.text) {
-            ctx.font = `700 ${18 * dpr}px Fredoka, sans-serif`;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.shadowColor = "#20213F";
+            ctx.shadowBlur = 6 * dpr;
+            ctx.font = `bold ${Math.floor(18 * dpr)}px Fredoka, sans-serif`;
             ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-
-            // Dark outline for high readability against camera background
-            ctx.strokeStyle = "#20213F";
-            ctx.lineWidth = 4 * dpr;
-            ctx.strokeText(eff.text, eff.x, eff.y);
-
-            ctx.fillStyle = "#FFD83D";
-            ctx.fillText(eff.text, eff.x, eff.y);
+            ctx.fillText(eff.text, eff.x, eff.y - progress * 40 * dpr);
           }
 
           ctx.restore();
-          remainingPopEffects.push(eff);
+          nextPopEffects.push(eff);
         }
       }
-      popEffectsRef.current = remainingPopEffects;
+      popEffectsRef.current = nextPopEffects;
 
-      // 6. Draw cursor trail
-      const currentTrail = trailRef.current;
-      for (let i = currentTrail.length - 1; i >= 0; i--) {
-        const tp = currentTrail[i];
+      // 6. Render Fingertip Movement Trails
+      for (let i = 0; i < trailRef.current.length; i++) {
+        const pt = trailRef.current[i];
         if (!isPaused) {
-          tp.alpha -= 0.05;
+          pt.alpha -= 0.04;
         }
-        if (tp.alpha > 0.05) {
+
+        if (pt.alpha > 0.05) {
           ctx.save();
-          ctx.globalAlpha = tp.alpha * 0.45;
-          ctx.fillStyle = tp.handIndex === 0 ? "#FF765E" : "#75C9F5";
+          const trailColor = pt.handIndex === 0 ? "#FF765E" : "#75C9F5";
+          ctx.globalAlpha = pt.alpha * 0.45;
+          ctx.fillStyle = trailColor;
+          ctx.shadowColor = trailColor;
+          ctx.shadowBlur = 10 * dpr;
           ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 8 * dpr * tp.alpha, 0, Math.PI * 2);
+          ctx.arc(pt.x, pt.y, 8 * dpr * pt.alpha, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-        } else {
-          currentTrail.splice(i, 1);
         }
       }
+      trailRef.current = trailRef.current.filter((p) => p.alpha > 0.05);
 
-      // 7. Draw glowing fingertip cursors
+      // 7. Render Vivid Hand Cursors
       for (const cur of mappedCursors) {
+        if (!cur.isTip) continue; // Only draw prominent targeting halos on fingertips
+
         ctx.save();
+        const pulse = Math.sin(now * 0.015) * 3;
+        const handColor = cur.handIndex === 0 ? "#FF765E" : cur.handIndex === 1 ? "#75C9F5" : "#FFD83D";
+        const glowColor = cur.handIndex === 0 ? "rgba(255, 118, 94, 0.85)" : "rgba(117, 201, 245, 0.85)";
 
-        const handColor = cur.handIndex === 0 ? "#FF765E" : "#75C9F5";
-        const glowColor = cur.handIndex === 0 ? "rgba(255, 118, 94, 0.6)" : "rgba(117, 201, 245, 0.6)";
-
-        // Outer pulsing ring
-        const pulse = Math.sin(now * 0.01) * 4 * dpr;
-        ctx.shadowColor = glowColor;
-        ctx.shadowBlur = 16 * dpr;
-
+        // Outer glowing aura
         const haloGrad = ctx.createRadialGradient(
           cur.x,
           cur.y,
-          4 * dpr,
+          3 * dpr,
           cur.x,
           cur.y,
-          (26 + pulse) * dpr
+          (28 + pulse) * dpr
         );
         haloGrad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
         haloGrad.addColorStop(0.35, glowColor);
@@ -555,30 +615,22 @@ export function BubbleBurstCanvas({
 
         ctx.fillStyle = haloGrad;
         ctx.beginPath();
-        ctx.arc(cur.x, cur.y, (26 + pulse) * dpr, 0, Math.PI * 2);
+        ctx.arc(cur.x, cur.y, (28 + pulse) * dpr, 0, Math.PI * 2);
         ctx.fill();
 
         // Inner sharp targeting ring
-        ctx.shadowBlur = 8 * dpr;
-        ctx.lineWidth = 2.5 * dpr;
+        ctx.shadowBlur = 10 * dpr;
+        ctx.lineWidth = 3 * dpr;
         ctx.strokeStyle = "#FFFFFF";
         ctx.beginPath();
-        ctx.arc(cur.x, cur.y, 14 * dpr, 0, Math.PI * 2);
+        ctx.arc(cur.x, cur.y, 16 * dpr, 0, Math.PI * 2);
         ctx.stroke();
 
         // Center fingertip pin
         ctx.fillStyle = handColor;
         ctx.beginPath();
-        ctx.arc(cur.x, cur.y, 6 * dpr, 0, Math.PI * 2);
+        ctx.arc(cur.x, cur.y, 7 * dpr, 0, Math.PI * 2);
         ctx.fill();
-
-        // Hand indicator label
-        ctx.font = `bold ${10 * dpr}px Nunito, sans-serif`;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.textAlign = "center";
-        ctx.shadowColor = "#20213F";
-        ctx.shadowBlur = 4 * dpr;
-        ctx.fillText(`Hand ${cur.handIndex + 1}`, cur.x, cur.y - 24 * dpr);
 
         ctx.restore();
       }
@@ -589,13 +641,15 @@ export function BubbleBurstCanvas({
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", updateCanvasSize);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerleave", handlePointerLeave);
     };
   }, [spawnBubble]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 w-full h-full pointer-events-none z-10"
+      className="absolute inset-0 w-full h-full pointer-events-auto cursor-crosshair z-10"
     />
   );
 }
