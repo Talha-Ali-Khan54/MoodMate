@@ -125,7 +125,7 @@ const activities = [
   { id: "move-match", title: "Move & Match", desc: "Quick, fun movement resets to bring energy, focus, and alignment.", time: "3 min", cat: "Move Your Body", color: "#A8E6C3", art: "move" },
   { id: "air-painter", title: "Air Painter", desc: "Channel your positive energy into glowing neon artwork.", time: "4 min", cat: "Creative Flow", color: "#FFD83D", art: "draw" },
   { id: "box-breathing", title: "Box breathing", desc: "Find your rhythm with a gentle guided breath.", time: "2 min", cat: "Relax & Breathe", color: "#75C9F5", art: "breathe" },
-  { id: "doodle", title: "Tiny doodle", desc: "Let your pencil wander. There is no wrong result.", time: "5 min", cat: "Get Creative", color: "#B991E8", art: "draw" },
+  // { id: "doodle", title: "Tiny doodle", desc: "Let your pencil wander. There is no wrong result.", time: "5 min", cat: "Get Creative", color: "#B991E8", art: "draw" },
 ] as const;
 
 function ActivityArt({ type, color }: { type: string; color: string }) {
