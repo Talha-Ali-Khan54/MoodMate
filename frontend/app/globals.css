@@ -844,7 +844,8 @@ main {
 }
 .weekly {
   padding: 32px;
-  background: var(--lavender);
+  /* background: var(--lavender); */
+  background: rgb(138, 215, 138);
   border: 0;
   transform: rotate(1deg);
 }
